@@ -4,6 +4,7 @@
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
   "main": "index.js",
   "scripts": {
+    "build": "browserify index.js > dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "pldespaigne",
@@ -11,5 +12,8 @@
   "dependencies": {
     "bs58": "^4.0.1",
     "multihashes": "^0.4.14"
+  },
+  "devDependencies": {
+    "browserify": "^16.2.3"
   }
 }
