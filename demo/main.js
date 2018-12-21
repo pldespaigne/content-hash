@@ -1,2 +1,6 @@
 
-// window.onload = // TODO
+window.onload = () => {
+
+	
+
+}

@@ -18,11 +18,19 @@
 
 const bs58 = require('bs58')
 const multiH = require('multihashes')
+const Buffer = require('buffer/').Buffer
 
 module.exports = {
 	// Codec constant defined in https://github.com/ensdomains/multicodec/blob/master/table.csv
 	SWARM_CODEC	: Buffer.from('00', 'hex'),
 	IPFS_CODEC	: Buffer.from('01', 'hex'),
+
+	/**
+	* Convert a hex string into a Buffer
+	* @param {hexString} a string containing hex values
+	* @return {Buffer} the string converted into a Buffer
+	*/
+	hexStringToBuffer: hexString =>	Buffer.from(hexString, 'hex'),
 
 	/**
 	* Decode a Content Hash buffer.
@@ -33,8 +41,8 @@ module.exports = {
 		const codec = contentHash.slice(0, 1)
 		const value = contentHash.slice(1)
 
-		if (codec.compare(this.SWARM_CODEC) === 0) return value.toString('hex')
-		else if (codec.compare(this.IPFS_CODEC) === 0) return bs58.encode(value)
+		if (Buffer(codec).compare(this.SWARM_CODEC) === 0) return value.toString('hex')
+		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) return bs58.encode(value)
 		else console.error('Unknown Codec : ', codec.toString('hex'))
 	},
 

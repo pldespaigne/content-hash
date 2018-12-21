@@ -1,5 +1,4 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.contentHash = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
-(function (Buffer){
 /*
 	ISC License
 
@@ -20,11 +19,19 @@
 
 const bs58 = require('bs58')
 const multiH = require('multihashes')
+const Buffer = require('buffer/').Buffer
 
 module.exports = {
 	// Codec constant defined in https://github.com/ensdomains/multicodec/blob/master/table.csv
 	SWARM_CODEC	: Buffer.from('00', 'hex'),
 	IPFS_CODEC	: Buffer.from('01', 'hex'),
+
+	/**
+	* Convert a hex string into a Buffer
+	* @param {hexString} a string containing hex values
+	* @return {Buffer} the string converted into a Buffer
+	*/
+	hexStringToBuffer: hexString =>	Buffer.from(hexString, 'hex'),
 
 	/**
 	* Decode a Content Hash buffer.
@@ -35,8 +42,8 @@ module.exports = {
 		const codec = contentHash.slice(0, 1)
 		const value = contentHash.slice(1)
 
-		if (codec.compare(this.SWARM_CODEC) === 0) return value.toString('hex')
-		else if (codec.compare(this.IPFS_CODEC) === 0) return bs58.encode(value)
+		if (Buffer(codec).compare(this.SWARM_CODEC) === 0) return value.toString('hex')
+		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) return bs58.encode(value)
 		else console.error('Unknown Codec : ', codec.toString('hex'))
 	},
 
@@ -69,8 +76,7 @@ module.exports = {
 		return Buffer.concat([codec, buffer])
 	},
 }
-}).call(this,require("buffer").Buffer)
-},{"bs58":4,"buffer":5,"multihashes":8}],2:[function(require,module,exports){
+},{"bs58":4,"buffer/":5,"multihashes":8}],2:[function(require,module,exports){
 // base-x encoding / decoding
 // Copyright (c) 2018 base-x contributors
 // Copyright (c) 2014-2018 The Bitcoin Core developers (base58.cpp)
