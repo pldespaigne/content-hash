@@ -3,6 +3,10 @@
   "version": "1.0.2",
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
   "main": "index.js",
+  "repository": {
+    "type" : "git",
+    "url" : "https://github.com/pldespaigne/content-hash"
+  },
   "scripts": {
     "build": "browserify index.js --s contentHash > dist/index.js",
     "demo": "static .",
