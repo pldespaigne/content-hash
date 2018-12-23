@@ -10,7 +10,7 @@
   "scripts": {
     "build": "browserify index.js --s contentHash > dist/index.js",
     "demo": "static ./demo",
-    "deploy-demo": "surge demo https://content-hash.surge.sh",
+    "deploy-demo": "echo \"surge demo https://content-hash.surge.sh\"",
     "test": "mocha"
   },
   "author": "pldespaigne",
@@ -24,7 +24,19 @@
     "browserify": "^16.2.3",
     "chai": "^4.2.0",
     "mocha": "^5.2.0",
-    "node-static": "^0.7.11",
-    "surge": "^0.20.1"
-  }
+    "node-static": "^0.7.11"
+  },
+  "keywords": [
+    "ethereum",
+    "ens",
+    "eip-1577",
+    "resolver",
+    "ipfs",
+    "swarm",
+    "content-hash",
+    "content",
+    "hash",
+    "contenthash",
+    "contentHash"
+  ],
 }
