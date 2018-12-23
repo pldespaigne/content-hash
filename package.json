@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "browserify index.js --s contentHash > dist/index.js",
-    "demo": "static .",
+    "demo": "static ./demo",
+    "deploy-demo": "surge demo https://content-hash.surge.sh",
     "test": "mocha"
   },
   "author": "pldespaigne",
@@ -23,6 +24,7 @@
     "browserify": "^16.2.3",
     "chai": "^4.2.0",
     "mocha": "^5.2.0",
-    "node-static": "^0.7.11"
+    "node-static": "^0.7.11",
+    "surge": "^0.20.1"
   }
 }

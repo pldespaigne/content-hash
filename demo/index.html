@@ -2,28 +2,40 @@
 <html>
 	<head>
 		<meta charset="utf-8">
-		<title>Content Hash Demo</title>
-		<!-- <script type="text/javascript" src="https://wzrd.in/standalone/buffer"></script> -->
-		<!-- <script type="text/javascript" src="../node_modules/buffer/index.js"></script> -->
-		<script type="text/javascript" src="../dist/index.js"></script>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Content Hash Calculator</title>
+		<script type="text/javascript" src="https://unpkg.com/content-hash/dist/index.js"></script>
 		<script type="text/javascript" src="main.js"></script>
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css">
+		<link rel="icon" href="gear.png" size="32x32">
 	</head>
 	<body>
-		<h1>open the console use the 'contentHash' object !</h1>
-		<div>
-			<h3>IPFS to content hash</h3>
-			<p>IPFS : QmRcDsEJUdpg6EDaVeZGFJHU1WYCKHXaUXBCzHHuCZLNXw</p>
-			<p calss="ipfs" data-value="QmRcDsEJUdpg6EDaVeZGFJHU1WYCKHXaUXBCzHHuCZLNXw"></p>
+		<h1 class="title is-size-1 has-text-centered">Content Hash Calculator</h1>
+		<p class="has-text-centered">A simple tool to encode/decode content hashes for <a href="https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1577.md">EIP 1577</a> compliant <a href="https://ens.readthedocs.io/en/latest/introduction.html">ENS Resolvers</a>.</p>
+		<p class="has-text-centered">Open the console to use the 'contentHash' object !</p>
+		<div class="section">
+			<h3 class="title">IPFS -> content hash</h3>
+			<input id="ipfs-input" class="level-item input" type="text" value="QmRcDsEJUdpg6EDaVeZGFJHU1WYCKHXaUXBCzHHuCZLNXw">
+			<button id="ipfs-encode" class="button is-primary">Encode</button>
+			<p id="ipfs-result"></p>
 		</div>
-		<div>
-			<h3>Swarm to content hash</h3>
-			<p>Swarm : d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162</p>
-			<p class="swarm" data-value="d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162"></p>
+		<div class="section">
+			<h3 class="title">Swarm -> content hash</h3>
+			<input id="swarm-input" class="input" type="text" value="d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162">
+			<button id="swarm-encode" class="button is-primary">Encode</button>
+			<p id="swarm-result"></p>
 		</div>
-		<div>
-			<h3>Content hash decode</h3>
-			<p>Content hash : 011220309043953cfc191544b97f488854ae83c7af41200b91d940b8fd8fd29c56dece</p>
-			<p class="content-hash" data-value="011220309043953cfc191544b97f488854ae83c7af41200b91d940b8fd8fd29c56dece"></p>
+		<div class="section">
+			<h3 class="title">Decode Content hash</h3>
+			<input id="content-input" class="input" type="text" value="011220309043953cfc191544b97f488854ae83c7af41200b91d940b8fd8fd29c56dece">
+			<button id="content-decode" class="button is-primary">Decode</button>
+			<p id="content-result"></p>
 		</div>
+		<footer class="footer">
+			<div class="content has-text-centered">
+				<p><strong>content-hash</strong> by <a href="https://twitter.com/pldespaigne">@pldespaigne</a></p>
+				<p>Get the code on <a href="https://github.com/pldespaigne/content-hash">Github</a> or download the <a href="https://www.npmjs.com/package/content-hash">NPM package</a> !</p>
+			</div>
+		</footer>
 	</body>
 </html>
