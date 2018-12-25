@@ -38,5 +38,11 @@ describe('content-hash', () =>
 			const test = buf.compare(res)
 			test.should.be.equal(0)
 		})
+		it('should get a codec type from a content hash', () => {
+			const res = 'ipfs'
+			const cth = Buffer.from('011220309043953cfc191544b97f488854ae83c7af41200b91d940b8fd8fd29c56dece', 'hex')
+			const test = contentHash.getCodec(cth)
+			test.should.be.equal(res)
+		})
 	}
 )

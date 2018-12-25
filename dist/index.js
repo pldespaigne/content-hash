@@ -22,6 +22,10 @@ const multiH = require('multihashes')
 const Buffer = require('buffer/').Buffer
 
 module.exports = {
+
+	// export multihash lib under the contentHash.multihash object
+	multihash: multiH,
+
 	// Codec constant defined in https://github.com/ensdomains/multicodec/blob/master/table.csv
 	SWARM_CODEC	: Buffer.from('00', 'hex'),
 	IPFS_CODEC	: Buffer.from('01', 'hex'),
@@ -43,7 +47,7 @@ module.exports = {
 		const value = contentHash.slice(1)
 
 		if (Buffer(codec).compare(this.SWARM_CODEC) === 0) return value.toString('hex')
-		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) return bs58.encode(value)
+		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) return bs58.encode(value) // replace bs58 w/ multihash
 		else console.error('Unknown Codec : ', codec.toString('hex'))
 	},
 
@@ -53,7 +57,7 @@ module.exports = {
 	* @return {Buffer} the resulting content hash
 	*/
 	fromIpfs: function (ipfsHash) {
-		const multihash = bs58.decode(ipfsHash)
+		const multihash = bs58.decode(ipfsHash) // replace bs58 w/ multihash
 		return this.fromBuffer(this.IPFS_CODEC, multihash)
 	},
 
@@ -75,6 +79,20 @@ module.exports = {
 	fromBuffer: function (codec, buffer) {
 		return Buffer.concat([codec, buffer])
 	},
+
+	/**
+	* Extract the type of a content hash [ swarm | ipfs | unknown ]
+	* @param {buffer} a content hash Buffer
+	* @return {strign} the extracted codec
+	*/
+	getCodec: function (buffer) {
+		res = 'unknown'
+		const codec = buffer.slice(0, 1)
+		if (Buffer(codec).compare(this.SWARM_CODEC) === 0) res = 'swarm'
+		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) res = 'ipfs'
+		else console.error('Unknown Codec : ', codec.toString('hex'))
+		return res
+	}
 }
 },{"bs58":4,"buffer/":5,"multihashes":8}],2:[function(require,module,exports){
 // base-x encoding / decoding
