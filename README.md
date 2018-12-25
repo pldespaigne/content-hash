@@ -25,17 +25,17 @@ Here you can find a [live demo](https://content-hash.surge.sh/) of this package.
 ## 🛠 Usage
 Import the module in order to use it :
 * **NodeJS** :
-```javascript
-const contentHash = require('content-hash')
-```
+	```javascript
+	const contentHash = require('content-hash')
+	```
 * **Browser** :
-```html
-<!--From CDN-->
-<script type="text/javascript" src="https://unpkg.com/content-hash/dist/index.js"></script>
+	```html
+	<!--From CDN-->
+	<script type="text/javascript" src="https://unpkg.com/content-hash/dist/index.js"></script>
 
-<!--From local module-->
-<script type="text/javascript" src="path/to/dist/index.js"></script>
-```
+	<!--From local module-->
+	<script type="text/javascript" src="path/to/dist/index.js"></script>
+	```
 > To rebuild the browser version of the package run `npm run build` into the root folder.
 
 ## 📕 API
@@ -95,7 +95,7 @@ const codec = contentHash.getCodec(encoded)
 *  pldespaigne : [github](https://github.com/pldespaigne), [twitter](https://twitter.com/pldespaigne)
 
 ## 🙌 Contributing
-For any questions, discussions, bug report, or whatever I will be happy to answer through the [issues](https://github.com/pldespaigne/content-hash/issues) or on my [twitter](https://twitter.com/pldespaigne) 😁.
+For any questions, discussions, bug report, or whatever I will be happy to answer through the [issues](https://github.com/pldespaigne/content-hash/issues) or on my [twitter](https://twitter.com/pldespaigne) 😁. PR are also welcome !
 
 ## 📝 License
 This project is licensed under the **ISC License**, you can find it [here](https://github.com/pldespaigne/content-hash/blob/master/LICENSE).
