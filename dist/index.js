@@ -92,7 +92,7 @@ module.exports = {
 		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) res = 'ipfs'
 		else console.error('Unknown Codec : ', codec.toString('hex'))
 		return res
-	}
+	},
 }
 },{"bs58":4,"buffer/":5,"multihashes":8}],2:[function(require,module,exports){
 // base-x encoding / decoding

@@ -91,5 +91,5 @@ module.exports = {
 		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) res = 'ipfs'
 		else console.error('Unknown Codec : ', codec.toString('hex'))
 		return res
-	}
+	},
 }

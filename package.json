@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "browserify index.js --s contentHash > dist/index.js",
-    "demo": "static ./demo",
+    "demo": "static .",
     "deploy-demo": "echo \"surge demo https://content-hash.surge.sh\"",
     "test": "mocha"
   },
