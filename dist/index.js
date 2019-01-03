@@ -1,4 +1,5 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.contentHash = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+(function (Buffer){
 /*
 	ISC License
 
@@ -17,84 +18,157 @@
 	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-const bs58 = require('bs58')
 const multiH = require('multihashes')
-const Buffer = require('buffer/').Buffer
 
-module.exports = {
-
-	// export multihash lib under the contentHash.multihash object
-	multihash: multiH,
+const utils = {
 
 	// Codec constant defined in https://github.com/ensdomains/multicodec/blob/master/table.csv
 	SWARM_CODEC	: Buffer.from('00', 'hex'),
 	IPFS_CODEC	: Buffer.from('01', 'hex'),
 
 	/**
-	* Convert a hex string into a Buffer
-	* @param {hexString} a string containing hex values
-	* @return {Buffer} the string converted into a Buffer
-	*/
-	hexStringToBuffer: hexString =>	Buffer.from(hexString, 'hex'),
+	 * Convert an hexadecimal string to a Buffer, the string can start with or without '0x'
+	 * @param {string} hex an hexadecimal value
+	 * @return {Buffer} the resulting Buffer
+	 */
+	hexString: function(hex) {
+		let prefix = hex.slice(0, 2)
+		let value = hex.slice(2)
+		let res = ''
+		if (prefix === '0x') res = value
+		else res = hex
+		return multiH.fromHexString(res)
+	}
+}
+
+/**
+ * Unknown Codec Error can be thrown by 'contentHash.getCodec()'
+ * @param {string} message the error message
+ */
+function UnknownCodec(message) {
+	this.message = message
+	this.name = 'Unknown Codec'
+}
+
+module.exports = {
 
 	/**
-	* Decode a Content Hash buffer.
-	* @param {contentHash} a Buffer containing a content hash
+	* Decode a Content Hash.
+	* @param {string} buffer an hex string containing a content hash
 	* @return {string} the decoded content
 	*/
-	decode: function (contentHash) {
-		const codec = contentHash.slice(0, 1)
-		const value = contentHash.slice(1)
+	decode: function (buffer) {
 
-		if (Buffer(codec).compare(this.SWARM_CODEC) === 0) return value.toString('hex')
-		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) return bs58.encode(value) // replace bs58 w/ multihash
-		else console.error('Unknown Codec : ', codec.toString('hex'))
+		buffer = utils.hexString(buffer)
+
+		const codec = buffer.slice(0, 1)
+		const value = buffer.slice(1)
+
+		if (codec.compare(utils.SWARM_CODEC) === 0) return value.toString('hex')
+		else if (codec.compare(utils.IPFS_CODEC) === 0) return multiH.toB58String(value)
+		else {
+			console.error('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + value.toString('hex'))
+			return value.toString('hex')
+		}
 	},
 
 	/**
 	* Encode an IPFS address into a content hash
-	* @param {ipfsHash} a string containing an IPFS address
-	* @return {Buffer} the resulting content hash
+	* @param {string} ipfsHash string containing an IPFS address
+	* @return {string} the resulting content hash
 	*/
 	fromIpfs: function (ipfsHash) {
-		const multihash = bs58.decode(ipfsHash) // replace bs58 w/ multihash
-		return this.fromBuffer(this.IPFS_CODEC, multihash)
+		const multihash = multiH.fromB58String(ipfsHash)
+		return this.fromBuffer(utils.IPFS_CODEC, multihash)
 	},
 
 	/**
 	* Encode a Swarm address into a content hash
-	* @param {swarmHash} a string containing a Swarm address
-	* @return {Buffer} the resulting content hash
+	* @param {string} swarmHash string containing a Swarm address
+	* @return {string} the resulting content hash
 	*/
 	fromSwarm: function (swarmHash) {
-		return this.fromBuffer(this.SWARM_CODEC, Buffer.from(swarmHash, 'hex'))
+		return this.fromBuffer(utils.SWARM_CODEC, Buffer.from(swarmHash, 'hex'))
 	},
 
 	/**
 	* Generic function to encode a buffer into a content hash
-	* @param {code} a Buffer containing a content hash codec constant
-	* @param {buffer} a Buffer containing the value of the content hash
-	* @return {Buffer} the resulting content hash
+	* @param {string} codec hex string containing a content hash codec constant
+	* @param {string} buffer hex string containing the value of the content hash
+	* @return {string} the resulting content hash
 	*/
 	fromBuffer: function (codec, buffer) {
-		return Buffer.concat([codec, buffer])
+		codec = utils.hexString(codec)
+		buffer = utils.hexString(buffer)
+		return Buffer.concat([codec, buffer]).toString('hex')
 	},
 
 	/**
-	* Extract the type of a content hash [ swarm | ipfs | unknown ]
-	* @param {buffer} a content hash Buffer
-	* @return {strign} the extracted codec
+	* Extract the type of a content hash [ 'swarm' | 'ipfs' | 'unknown' ]
+	* @param {string} buffer hex string containing a content hash
+	* @return {string} the extracted codec
+	* @throws {UnknownCodec} if the codec is unknown
 	*/
 	getCodec: function (buffer) {
+		buffer = utils.hexString(buffer)
 		res = 'unknown'
 		const codec = buffer.slice(0, 1)
-		if (Buffer(codec).compare(this.SWARM_CODEC) === 0) res = 'swarm'
-		else if (Buffer(codec).compare(this.IPFS_CODEC) === 0) res = 'ipfs'
-		else console.error('Unknown Codec : ', codec.toString('hex'))
+		if (codec.compare(utils.SWARM_CODEC) === 0) res = 'swarm'
+		else if (codec.compare(utils.IPFS_CODEC) === 0) res = 'ipfs'
+		else throw new UnknownCodec('codec : ' + codec.toString('hex') + ', content-hash : ' + buffer.toString('hex'))
 		return res
 	},
+
+	/**
+	* Check if a content hash is an ipfs address
+	* @param {string} buffer hex string containing a content hash
+	* @return {boolean} wether or not if it's an ipfs address
+	*/
+	isIpfs: function (buffer) {
+		let codec = ''
+		
+		try {
+			codec = this.getCodec(buffer)
+		} catch (err) {
+			if (err.name === 'Unknown Codec') return false
+		}
+		return codec === 'ipfs'
+	},
+
+	/**
+	* Check if a content hash is a swarm address
+	* @param {string} buffer hex string containing a content hash
+	* @return {boolean} wether or not if it's a swarm address
+	*/
+	isSwarm: function (buffer) {
+		let codec = ''
+		
+		try {
+			codec = this.getCodec(buffer)
+		} catch (err) {
+			if (err.name === 'Unknown Codec') return false
+		}
+		return codec === 'swarm'
+	},
+
+	/**
+	* Check if a content hash has an unknown codec
+	* @param {string} buffer hex string containing a content hash
+	* @return {boolean} wether or not if the content hash has an unknown codec
+	*/
+	isUnknown: function (buffer) {
+		let codec = ''
+		
+		try {
+			codec = this.getCodec(buffer)
+		} catch (err) {
+			if (err.name === 'Unknown Codec') return true
+		}
+		return false
+	},
 }
-},{"bs58":4,"buffer/":5,"multihashes":8}],2:[function(require,module,exports){
+}).call(this,require("buffer").Buffer)
+},{"buffer":5,"multihashes":8}],2:[function(require,module,exports){
 // base-x encoding / decoding
 // Copyright (c) 2018 base-x contributors
 // Copyright (c) 2014-2018 The Bitcoin Core developers (base58.cpp)

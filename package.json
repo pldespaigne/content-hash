@@ -16,8 +16,6 @@
   "author": "pldespaigne",
   "license": "ISC",
   "dependencies": {
-    "bs58": "^4.0.1",
-    "buffer": "^5.2.1",
     "multihashes": "^0.4.14"
   },
   "devDependencies": {
