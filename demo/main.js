@@ -22,12 +22,12 @@ window.onload = () => {
 	const codecResultElem = document.getElementById('codec-result')
 	contentButtonElem.addEventListener('click', () => {
 		contentResultElem.innerHTML = contentHash.decode(contentInputElem.value)
+		
 		let codec = 'unknown'
-		try{
-			codec = contentHash.getCodec(contentInputElem.value)
-		} catch (err) {
-			console.error(err.name + ' : ' + err.message)
-		}
+		
+		if(contentHash.isHashOfType(contentInputElem.value, contentHash.Types.ipfs))codec = 'ipfs'
+		else if(contentHash.isHashOfType(contentInputElem.value, contentHash.Types.swarm))codec = 'swarm'
+
 		codecResultElem.innerHTML = 'codec : ' + codec
 	})
 }
