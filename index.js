@@ -64,7 +64,7 @@ module.exports = {
 		if (codec.compare(this.Types.swarm) === 0) return value.toString('hex')
 		else if (codec.compare(this.Types.ipfs) === 0) return multiH.toB58String(value)
 		else {
-			console.error('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + value.toString('hex'))
+			console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + value.toString('hex'))
 			return value.toString('hex')
 		}
 	},
