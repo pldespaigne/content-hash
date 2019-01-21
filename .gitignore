@@ -78,3 +78,16 @@ typings/
 
 # DynamoDB Local files
 .dynamodb/
+
+
+
+# --------------------
+#      CUSTOM
+# --------------------
+
+notes.txt
+
+
+
+
+

@@ -16,6 +16,7 @@
   "author": "pldespaigne",
   "license": "ISC",
   "dependencies": {
+    "multicodec": "^0.4.0",
     "multihashes": "^0.4.14"
   },
   "devDependencies": {
