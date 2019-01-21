@@ -1,6 +1,6 @@
 
 window.onload = () => {
-	console.log('contentHash')
+	console.log('contentHash ✅')
 
 	const ipfsInputElem = document.getElementById('ipfs-input')
 	const ipfsButtonElem = document.getElementById('ipfs-encode')
@@ -21,13 +21,20 @@ window.onload = () => {
 	const contentResultElem = document.getElementById('content-result')
 	const codecResultElem = document.getElementById('codec-result')
 	contentButtonElem.addEventListener('click', () => {
-		contentResultElem.innerHTML = contentHash.decode(contentInputElem.value)
+		let cth = contentHash.decode(contentInputElem.value)
 		
 		let codec = 'unknown'
 		
 		if(contentHash.isHashOfType(contentInputElem.value, contentHash.Types.ipfs))codec = 'ipfs'
 		else if(contentHash.isHashOfType(contentInputElem.value, contentHash.Types.swarm))codec = 'swarm'
 
+		let url = 'https://'
+		if(codec === 'ipfs') url += 'gateway.ipfs.io/ipfs/' + cth + '/'
+		else if(codec === 'swarm') url += 'swarm-gateways.net/bzz:/' + cth + '/'
+		else url = '#'
+
 		codecResultElem.innerHTML = 'codec : ' + codec
+		contentResultElem.innerHTML = cth
+		contentResultElem.href = url
 	})
 }

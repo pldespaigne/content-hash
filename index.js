@@ -16,6 +16,7 @@
 	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
+const multiC = require('multicodec')
 const multiH = require('multihashes')
 
 /**
@@ -43,10 +44,10 @@ function hexString(hex) {
 
 module.exports = {
 
-	Types: {
+	Types: { // TODO remove this when multicodec will be updated
 		// Codec constant defined in https://github.com/ensdomains/multicodec/blob/master/table.csv
-		swarm	: Buffer.from('00', 'hex'),
-		ipfs	: Buffer.from('01', 'hex'),
+		swarm	: Buffer.from('f0', 'hex'),
+		ipfs	: Buffer.from('ef', 'hex'),
 	},
 
 	/**
@@ -57,16 +58,21 @@ module.exports = {
 	decode: function (hash) {
 
 		let buffer = hexString(hash)
+		
 
 		const codec = buffer.slice(0, 1)
-		const value = buffer.slice(1)
+		const value = buffer.slice(3)
+		let res = value.toString('hex')
 
-		if (codec.compare(this.Types.swarm) === 0) return value.toString('hex')
-		else if (codec.compare(this.Types.ipfs) === 0) return multiH.toB58String(value)
-		else {
-			console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + value.toString('hex'))
-			return value.toString('hex')
+		if (codec.compare(this.Types.swarm) === 0){// TODO change that for "multiC.getCodec(res) === 'swarm-ns'" when multicodec will be updated
+			res = multiH.decode(value).digest.toString('hex')
+		} else if (codec.compare(this.Types.ipfs) === 0){// TODO change that for "multiC.getCodec(res) === 'swarm-ns'" when multicodec will be updated
+			res = multiH.toB58String(value)
+
+		} else {
+			console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + res)
 		}
+		return res
 	},
 
 	/**
@@ -75,8 +81,11 @@ module.exports = {
 	* @return {string} the resulting content hash
 	*/
 	fromIpfs: function (ipfsHash) {
-		const multihash = multiH.fromB58String(ipfsHash)
-		return this.fromBuffer(this.Types.ipfs, multihash)
+		const multihash = multiH.fromB58String(ipfsHash) // get Multihash buffer
+		let res = multiC.addPrefix('dag-pb', multihash) // adding MerkleDAG codec : 0x70
+		res = hexString('01' + res.toString('hex')) // adding CID v1 : 0x01
+		res = Buffer.concat([this.Types.ipfs, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('ipfs-ns', res)' when multicodec will be updated
+		return res.toString('hex')
 	},
 
 	/**
@@ -85,27 +94,22 @@ module.exports = {
 	* @return {string} the resulting content hash
 	*/
 	fromSwarm: function (swarmHash) {
-		return this.fromBuffer(this.Types.swarm, Buffer.from(swarmHash, 'hex'))
+		swarmHash = hexString(swarmHash)
+		let multihash = multiH.encode(swarmHash, 'keccak-256') // get Multihash buffer
+		let res = multiC.addPrefix('dag-pb', multihash) // adding MerkleDAG codec : 0x70
+		res = hexString('01' + res.toString('hex')) // adding CID v1 : 0x01
+		res = Buffer.concat([this.Types.swarm, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('swarm-ns', res)' when multicodec will be updated
+		return res.toString('hex')
 	},
 
-	/**
-	* Generic function to encode a buffer into a content hash
-	* @param {string} codec hex string containing a content hash codec constant
-	* @param {string} buffer hex string containing the value of the content hash
-	* @return {string} the resulting content hash
-	*/
-	fromBuffer: function (codec, buffer) {
-		codec = hexString(codec)
-		buffer = hexString(buffer)
-		return Buffer.concat([codec, buffer]).toString('hex')
-	},
+	
 
 	/**
 	* Extract the codec of a content hash
 	* @param {string} hash hex string containing a content hash
 	* @return {string} the extracted codec
 	*/
-	getCodecType: function (hash) {
+	getCodecType: function (hash) {// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
 		let buffer = hexString(hash)
 		const codec = buffer.slice(0, 1)
 		return codec.toString('hex')
@@ -116,7 +120,7 @@ module.exports = {
 	 * @param {string} hash hex string containing a content hash 
 	 * @param {Buffer} type a codec define in the Types object
 	 */
-	isHashOfType: function (hash, type) {
+	isHashOfType: function (hash, type) {// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
 		let codec = this.getCodecType(hash)
 		let codecBuffer = hexString(codec)
 		let eq = codecBuffer.compare(type)
@@ -130,76 +134,17 @@ module.exports = {
 	// TODO : delete deprecated functions in the next version
 
 	/**
-	* Extract the type of a content hash [ 'swarm' | 'ipfs' | 'unknown' ]
-	* @param {string} buffer hex string containing a content hash
-	* @return {string} the extracted codec
-	* @throws {UnknownCodec} if the codec is unknown
-	* @deprecated this function is DEPRECATED in favor of 'getCodecType(hash)' and it will be remove soon !
+	* Generic function to encode a buffer into a content hash
+	* @param {string} codec hex string containing a content hash codec constant
+	* @param {string} buffer hex string containing the value of the content hash
+	* @return {string} the resulting content hash
+	* @deprecated this function is DEPRECATED and it will be remove soon ! Use addPrefix() from the multicodec lib.
 	*/
-	getCodec: function (buffer) {
-		console.error('⚠️ DEPRECATED ⚠️ : \'getCodec(hash)\' will be remove soon, please use the new function \'getCodecType(hash)\' !')
-		
+	fromBuffer: function (codec, buffer) {
+		console.error('⚠️ DEPRECATED ⚠️ : \'fromBuffer(codec, buffer)\' will be remove soon, please use \'addPrefix()\' from the \'multicodec\' lib ! https://github.com/multiformats/js-multicodec')
+
+		codec = hexString(codec)
 		buffer = hexString(buffer)
-		res = 'unknown'
-		const codec = buffer.slice(0, 1)
-
-		if (codec.compare(this.Types.swarm) === 0) res = 'swarm'
-		else if (codec.compare(this.Types.ipfs) === 0) res = 'ipfs'
-		else throw new UnknownCodec('codec : ' + codec.toString('hex') + ', content-hash : ' + buffer.toString('hex'))
-		return res
-	},
-
-	/**
-	* Check if a content hash is an ipfs address
-	* @param {string} buffer hex string containing a content hash
-	* @return {boolean} wether or not if it's an ipfs address
-	* @deprecated this function is DEPRECATED in favor of 'isHashOfType(hash, type)' and it will be remove soon !
-	*/
-	isIpfs: function (buffer) {
-		console.error('⚠️ DEPRECATED ⚠️ : \'isIpfs(hash)\' will be remove soon, please use the new function \'isHashOfType(hash)\' !')
-		let codec = ''
-		
-		try {
-			codec = this.getCodec(buffer)
-		} catch (err) {
-			if (err.name === 'Unknown Codec') return false
-		}
-		return codec === 'ipfs'
-	},
-
-	/**
-	* Check if a content hash is a swarm address
-	* @param {string} buffer hex string containing a content hash
-	* @return {boolean} wether or not if it's a swarm address
-	* @deprecated this function is DEPRECATED in favor of 'isHashOfType(hash, type)' and it will be remove soon !
-	*/
-	isSwarm: function (buffer) {
-		console.error('⚠️ DEPRECATED ⚠️ : \'isSwarm(hash)\' will be remove soon, please use the new function \'isHashOfType(hash)\' !')
-		let codec = ''
-		
-		try {
-			codec = this.getCodec(buffer)
-		} catch (err) {
-			if (err.name === 'Unknown Codec') return false
-		}
-		return codec === 'swarm'
-	},
-
-	/**
-	* Check if a content hash has an unknown codec
-	* @param {string} buffer hex string containing a content hash
-	* @return {boolean} wether or not if the content hash has an unknown codec
-	* @deprecated this function is DEPRECATED in favor of 'isHashOfType(hash, type)' and it will be remove soon !
-	*/
-	isUnknown: function (buffer) {
-		console.error('⚠️ DEPRECATED ⚠️ : \'isUnknown(hash)\' will be remove soon, please use the new function \'isHashOfType(hash)\' !')
-		let codec = ''
-		
-		try {
-			codec = this.getCodec(buffer)
-		} catch (err) {
-			if (err.name === 'Unknown Codec') return true
-		}
-		return false
+		return Buffer.concat([codec, buffer]).toString('hex')
 	},
 }
