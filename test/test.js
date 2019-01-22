@@ -4,9 +4,9 @@ const expect = require('chai').expect
 const contentHash = require('../index.js')
 
 const ipfs = 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
-const ipfs_contentHash = 'ef0170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
+const ipfs_contentHash = 'e3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
 const swarm = 'd1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
-const swarm_contentHash = 'f001701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
+const swarm_contentHash = 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 
 describe('content-hash', () => 
 	{

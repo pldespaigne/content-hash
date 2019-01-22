@@ -48,14 +48,14 @@ Import the module in order to use it :
 
 ### contentHash.Types
 This is an object that defines the codec type constants.
-* contentHash.Types.**swarm** : codec for Swarm content hashes = `0xf0`
-* contentHash.Types.**ipfs** : codec for IPFS content hashes = `0xef`
+* contentHash.Types.**ipfs** : codec for IPFS content hashes = `0xe3`
+* contentHash.Types.**swarm** : codec for Swarm content hashes = `0xe4`
 > `contentHash.Types` will be deprecated soon !
 
 ### contentHash.decode( string ) -> string
 This function takes a content hash as a hex **string** and returns the decoded content as a **string**.
 ```javascript
-const encoded = 'ef0170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
+const encoded = 'e3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
 
 const content = contentHash.decode(encoded)
 // 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
@@ -67,7 +67,7 @@ This function takes an IPFS address as a base58 encoded **string** and returns t
 const ipfsHash = 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
 
 const contentH = contentHash.fromIpfs(ipfsHash)
-// 'ef0170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
+// 'e3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
 ```
 
 ### contentHash.fromSwarm( swarmHash ) -> string
@@ -76,21 +76,21 @@ This function takes a Swarm address as a hex **string** and returns the encoded 
 const swarmHash = 'd1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 
 const contentH = contentHash.fromSwarm(swarmHash)
-// 'f001701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
+// 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 ```
 
 ### contentHash.getCodecType( contentHash ) -> string
 This function takes a content hash as a hex **string** and returns the codec as a hex **string**.
 ```javascript
-const encoded = 'f001701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
+const encoded = 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 
-const codec = contentHash.getCodecType(encoded) // 'f0'
+const codec = contentHash.getCodecType(encoded) // 'e4'
 // here codec is equal to contentHash.Types.swarm.toString('hex')
 ```
 ### contentHash.isHashOfType( contentHash, type ) -> boolean
 This function takes a content hash as a hex **string** and a codec as a **contentHash.Types** and returns a **boolean** depending on wether or not the content hash has the same codec as the type.
 ```javascript
-const encoded = 'f001701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
+const encoded = 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 
 contentHash.isHashOfType(encoded, contentHash.Types.swarm) // true
 ```

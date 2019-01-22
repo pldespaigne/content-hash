@@ -46,8 +46,8 @@ module.exports = {
 
 	Types: { // TODO remove this when multicodec will be updated
 		// Codec constant defined in https://github.com/ensdomains/multicodec/blob/master/table.csv
-		swarm	: Buffer.from('f0', 'hex'),
-		ipfs	: Buffer.from('ef', 'hex'),
+		ipfs	: Buffer.from('e3', 'hex'),
+		swarm	: Buffer.from('e4', 'hex'),
 	},
 
 	/**
@@ -61,12 +61,12 @@ module.exports = {
 		
 
 		const codec = buffer.slice(0, 1)
-		const value = buffer.slice(3)
+		const value = buffer.slice(4)
 		let res = value.toString('hex')
 
 		if (codec.compare(this.Types.swarm) === 0){// TODO change that for "multiC.getCodec(res) === 'swarm-ns'" when multicodec will be updated
 			res = multiH.decode(value).digest.toString('hex')
-		} else if (codec.compare(this.Types.ipfs) === 0){// TODO change that for "multiC.getCodec(res) === 'swarm-ns'" when multicodec will be updated
+		} else if (codec.compare(this.Types.ipfs) === 0){// TODO change that for "multiC.getCodec(res) === 'ipfs-ns'" when multicodec will be updated
 			res = multiH.toB58String(value)
 
 		} else {
@@ -84,6 +84,8 @@ module.exports = {
 		const multihash = multiH.fromB58String(ipfsHash) // get Multihash buffer
 		let res = multiC.addPrefix('dag-pb', multihash) // adding MerkleDAG codec : 0x70
 		res = hexString('01' + res.toString('hex')) // adding CID v1 : 0x01
+
+		res = hexString('01' + res.toString('hex')) // adding uvarint // ! USE A LIB, DO NOT HARDCODE ! (see https://github.com/multiformats/unsigned-varint)
 		res = Buffer.concat([this.Types.ipfs, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('ipfs-ns', res)' when multicodec will be updated
 		return res.toString('hex')
 	},
@@ -98,6 +100,8 @@ module.exports = {
 		let multihash = multiH.encode(swarmHash, 'keccak-256') // get Multihash buffer
 		let res = multiC.addPrefix('dag-pb', multihash) // adding MerkleDAG codec : 0x70
 		res = hexString('01' + res.toString('hex')) // adding CID v1 : 0x01
+
+		res = hexString('01' + res.toString('hex')) // adding uvarint // ! USE A LIB, DO NOT HARDCODE ! (see https://github.com/multiformats/unsigned-varint)
 		res = Buffer.concat([this.Types.swarm, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('swarm-ns', res)' when multicodec will be updated
 		return res.toString('hex')
 	},
