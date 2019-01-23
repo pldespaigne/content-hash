@@ -17,7 +17,8 @@
   "license": "ISC",
   "dependencies": {
     "multicodec": "^0.4.0",
-    "multihashes": "^0.4.14"
+    "multihashes": "^0.4.14",
+    "varint": "^5.0.0"
   },
   "devDependencies": {
     "browserify": "^16.2.3",

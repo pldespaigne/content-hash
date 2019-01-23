@@ -18,6 +18,7 @@
 	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
+const varint = require('varint')
 const multiC = require('multicodec')
 const multiH = require('multihashes')
 
@@ -61,9 +62,11 @@ module.exports = {
 
 		let buffer = hexString(hash)
 		
+		const codec = Buffer.from(varint.decode(buffer).toString(16), 'hex') // get decoded varint codec
+		const value = buffer.slice(varint.decode.bytes + 1 + 1) // remove the codec bytes plus de cid version byte plus merkle dag codec // TODO use js-cid instead of +1 +1
 
-		const codec = buffer.slice(0, 1)
-		const value = buffer.slice(4)
+		// const codec = buffer.slice(0, 1)
+		// const value = buffer.slice(4)
 		let res = value.toString('hex')
 
 		if (codec.compare(this.Types.swarm) === 0){// TODO change that for "multiC.getCodec(res) === 'swarm-ns'" when multicodec will be updated
@@ -87,8 +90,13 @@ module.exports = {
 		let res = multiC.addPrefix('dag-pb', multihash) // adding MerkleDAG codec : 0x70
 		res = hexString('01' + res.toString('hex')) // adding CID v1 : 0x01
 
-		res = hexString('01' + res.toString('hex')) // adding uvarint // ! USE A LIB, DO NOT HARDCODE ! (see https://github.com/multiformats/unsigned-varint)
-		res = Buffer.concat([this.Types.ipfs, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('ipfs-ns', res)' when multicodec will be updated
+		// res = hexString('01' + res.toString('hex')) // adding uvarint // ! USE A LIB, DO NOT HARDCODE ! (see https://github.com/multiformats/unsigned-varint)
+		// res = Buffer.concat([this.Types.ipfs, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('ipfs-ns', res)' when multicodec will be updated
+		
+		let codec = Buffer.from(varint.encode(parseInt(this.Types.ipfs.toString('hex'), 16))) // TODO remove that when multicodec will be updated
+		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16))) // TODO use that when multicodec will be updated
+		res = Buffer.concat([codec, res])
+		
 		return res.toString('hex')
 	},
 
@@ -103,8 +111,13 @@ module.exports = {
 		let res = multiC.addPrefix('dag-pb', multihash) // adding MerkleDAG codec : 0x70
 		res = hexString('01' + res.toString('hex')) // adding CID v1 : 0x01
 
-		res = hexString('01' + res.toString('hex')) // adding uvarint // ! USE A LIB, DO NOT HARDCODE ! (see https://github.com/multiformats/unsigned-varint)
-		res = Buffer.concat([this.Types.swarm, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('swarm-ns', res)' when multicodec will be updated
+		// res = hexString('01' + res.toString('hex')) // adding uvarint // ! USE A LIB, DO NOT HARDCODE ! (see https://github.com/multiformats/unsigned-varint)
+		// res = Buffer.concat([this.Types.swarm, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('swarm-ns', res)' when multicodec will be updated
+		
+		let codec = Buffer.from(varint.encode(parseInt(this.Types.swarm.toString('hex'), 16))) // TODO remove that when multicodec will be updated
+		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16))) // TODO use that when multicodec will be updated
+		res = Buffer.concat([codec, res])
+
 		return res.toString('hex')
 	},
 
@@ -155,7 +168,7 @@ module.exports = {
 	},
 }
 }).call(this,require("buffer").Buffer)
-},{"buffer":5,"multicodec":8,"multihashes":13}],2:[function(require,module,exports){
+},{"buffer":5,"multicodec":8,"multihashes":13,"varint":17}],2:[function(require,module,exports){
 // base-x encoding / decoding
 // Copyright (c) 2018 base-x contributors
 // Copyright (c) 2014-2018 The Bitcoin Core developers (base58.cpp)
