@@ -18,6 +18,7 @@
 	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
+const CID = require('cids')
 const varint = require('varint')
 const multiC = require('multicodec')
 const multiH = require('multihashes')
@@ -26,7 +27,7 @@ const multiH = require('multihashes')
  * Unknown Codec Error can be thrown by 'contentHash.getCodec()'
  * @param {string} message the error message
  */
-function UnknownCodec(message) { // ? Do we need this anymore since 'contentHash.getCodec()' has been deprecated ?
+function UnknownCodec(message) { // ? Do we steel need this since 'contentHash.getCodec()' has been deprecated ?
 	this.message = message
 	this.name = 'Unknown Codec'
 }
@@ -62,18 +63,20 @@ module.exports = {
 
 		let buffer = hexString(hash)
 		
-		const codec = Buffer.from(varint.decode(buffer).toString(16), 'hex') // get decoded varint codec
-		const value = buffer.slice(varint.decode.bytes + 1 + 1) // remove the codec bytes plus de cid version byte plus merkle dag codec // TODO use js-cid instead of +1 +1
+		const codec = Buffer.from(varint.decode(buffer).toString(16), 'hex')	// get decoded varint codec
+		let value = buffer.slice(varint.decode.bytes)							// remove the codec bytes
+		let cid = new CID(value)												// prepare a cid from value in case the codec is of type ipfs or swarm
 
-		// const codec = buffer.slice(0, 1)
-		// const value = buffer.slice(4)
 		let res = value.toString('hex')
 
-		if (codec.compare(this.Types.swarm) === 0){// TODO change that for "multiC.getCodec(res) === 'swarm-ns'" when multicodec will be updated
+		if (codec.compare(this.Types.swarm) === 0){		// TODO remove that when multicodec will be updated
+		// if (multiC.getCodec(res) === 'swarm-ns'){	// TODO use that when multicodec will be updated
+			value = cid.multihash
 			res = multiH.decode(value).digest.toString('hex')
-		} else if (codec.compare(this.Types.ipfs) === 0){// TODO change that for "multiC.getCodec(res) === 'ipfs-ns'" when multicodec will be updated
+		} else if (codec.compare(this.Types.ipfs) === 0){		// TODO remove that when multicodec will be updated
+		// } else if (multiC.getCodec(res) === 'ipfs-ns'){		// TODO use that when multicodec will be updated
+			value = cid.multihash	
 			res = multiH.toB58String(value)
-
 		} else {
 			console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + res)
 		}
@@ -86,16 +89,12 @@ module.exports = {
 	* @return {string} the resulting content hash
 	*/
 	fromIpfs: function (ipfsHash) {
-		const multihash = multiH.fromB58String(ipfsHash) // get Multihash buffer
-		let res = multiC.addPrefix('dag-pb', multihash) // adding MerkleDAG codec : 0x70
-		res = hexString('01' + res.toString('hex')) // adding CID v1 : 0x01
+		let multihash = multiH.fromB58String(ipfsHash)	// get Multihash buffer
+		let res = new CID(1, 'dag-pb', multihash)		// create a CIDv1 with the multihash
 
-		// res = hexString('01' + res.toString('hex')) // adding uvarint // ! USE A LIB, DO NOT HARDCODE ! (see https://github.com/multiformats/unsigned-varint)
-		// res = Buffer.concat([this.Types.ipfs, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('ipfs-ns', res)' when multicodec will be updated
-		
-		let codec = Buffer.from(varint.encode(parseInt(this.Types.ipfs.toString('hex'), 16))) // TODO remove that when multicodec will be updated
-		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16))) // TODO use that when multicodec will be updated
-		res = Buffer.concat([codec, res])
+		let codec = Buffer.from(varint.encode(parseInt(this.Types.ipfs.toString('hex'), 16)))		// TODO remove that when multicodec will be updated
+		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16)))	// TODO use that when multicodec will be updated
+		res = Buffer.concat([codec, res.buffer])		// append the varint encoded codec to the CIDv1
 		
 		return res.toString('hex')
 	},
@@ -107,16 +106,12 @@ module.exports = {
 	*/
 	fromSwarm: function (swarmHash) {
 		swarmHash = hexString(swarmHash)
-		let multihash = multiH.encode(swarmHash, 'keccak-256') // get Multihash buffer
-		let res = multiC.addPrefix('dag-pb', multihash) // adding MerkleDAG codec : 0x70
-		res = hexString('01' + res.toString('hex')) // adding CID v1 : 0x01
-
-		// res = hexString('01' + res.toString('hex')) // adding uvarint // ! USE A LIB, DO NOT HARDCODE ! (see https://github.com/multiformats/unsigned-varint)
-		// res = Buffer.concat([this.Types.swarm, res]) // adding IPFS code : 0xef // TODO change that for 'multiC.addPrefix('swarm-ns', res)' when multicodec will be updated
+		let multihash = multiH.encode(swarmHash, 'keccak-256')	// get Multihash buffer
+		let res = new CID(1, 'dag-pb', multihash)				// create a CIDv1 with the multihash
 		
-		let codec = Buffer.from(varint.encode(parseInt(this.Types.swarm.toString('hex'), 16))) // TODO remove that when multicodec will be updated
-		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16))) // TODO use that when multicodec will be updated
-		res = Buffer.concat([codec, res])
+		let codec = Buffer.from(varint.encode(parseInt(this.Types.swarm.toString('hex'), 16)))		// TODO remove that when multicodec will be updated
+		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16)))	// TODO use that when multicodec will be updated
+		res = Buffer.concat([codec, res.buffer])				// append the varint encoded codec to the CIDv1
 
 		return res.toString('hex')
 	},
@@ -128,7 +123,7 @@ module.exports = {
 	* @param {string} hash hex string containing a content hash
 	* @return {string} the extracted codec
 	*/
-	getCodecType: function (hash) {// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
+	getCodecType: function (hash) {	// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
 		let buffer = hexString(hash)
 		const codec = buffer.slice(0, 1)
 		return codec.toString('hex')
@@ -139,7 +134,7 @@ module.exports = {
 	 * @param {string} hash hex string containing a content hash 
 	 * @param {Buffer} type a codec define in the Types object
 	 */
-	isHashOfType: function (hash, type) {// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
+	isHashOfType: function (hash, type) {	// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
 		let codec = this.getCodecType(hash)
 		let codecBuffer = hexString(codec)
 		let eq = codecBuffer.compare(type)
@@ -168,7 +163,7 @@ module.exports = {
 	},
 }
 }).call(this,require("buffer").Buffer)
-},{"buffer":5,"multicodec":8,"multihashes":13,"varint":17}],2:[function(require,module,exports){
+},{"buffer":5,"cids":12,"multicodec":24,"multihashes":29,"varint":33}],2:[function(require,module,exports){
 // base-x encoding / decoding
 // Copyright (c) 2018 base-x contributors
 // Copyright (c) 2014-2018 The Bitcoin Core developers (base58.cpp)
@@ -320,7 +315,7 @@ module.exports = function base (ALPHABET) {
   }
 }
 
-},{"safe-buffer":14}],3:[function(require,module,exports){
+},{"safe-buffer":30}],3:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -2258,7 +2253,961 @@ function numberIsNaN (obj) {
   return obj !== obj // eslint-disable-line no-self-compare
 }
 
-},{"base64-js":3,"ieee754":6}],6:[function(require,module,exports){
+},{"base64-js":3,"ieee754":14}],6:[function(require,module,exports){
+(function (Buffer){
+'use strict'
+
+// spec and table at: https://github.com/multiformats/multicodec
+
+exports = module.exports
+
+// Miscellaneous
+exports['raw'] = Buffer.from('55', 'hex')
+
+// bases encodings
+exports['base1'] = Buffer.from('01', 'hex')
+exports['base2'] = Buffer.from('00', 'hex')
+exports['base8'] = Buffer.from('07', 'hex')
+exports['base10'] = Buffer.from('09', 'hex')
+
+// Serialization formats
+exports['cbor'] = Buffer.from('51', 'hex')
+exports['protobuf'] = Buffer.from('50', 'hex')
+exports['rlp'] = Buffer.from('60', 'hex')
+exports['bencode'] = Buffer.from('63', 'hex')
+
+// Multiformats
+exports['multicodec'] = Buffer.from('30', 'hex')
+exports['multihash'] = Buffer.from('31', 'hex')
+exports['multiaddr'] = Buffer.from('32', 'hex')
+exports['multibase'] = Buffer.from('33', 'hex')
+exports['md4'] = Buffer.from('d4', 'hex')
+exports['md5'] = Buffer.from('d5', 'hex')
+
+// multihashes
+exports['sha1'] = Buffer.from('11', 'hex')
+exports['sha2-256'] = Buffer.from('12', 'hex')
+exports['sha2-512'] = Buffer.from('13', 'hex')
+exports['dbl-sha2-256'] = Buffer.from('56', 'hex')
+exports['sha3-224'] = Buffer.from('17', 'hex')
+exports['sha3-256'] = Buffer.from('16', 'hex')
+exports['sha3-384'] = Buffer.from('15', 'hex')
+exports['sha3-512'] = Buffer.from('14', 'hex')
+exports['shake-128'] = Buffer.from('18', 'hex')
+exports['shake-256'] = Buffer.from('19', 'hex')
+exports['keccak-224'] = Buffer.from('1a', 'hex')
+exports['keccak-256'] = Buffer.from('1b', 'hex')
+exports['keccak-384'] = Buffer.from('1c', 'hex')
+exports['keccak-512'] = Buffer.from('1d', 'hex')
+exports['murmur3'] = Buffer.from('22', 'hex')
+exports['blake2b-8'] = Buffer.from('b201', 'hex')
+exports['blake2b-16'] = Buffer.from('b202', 'hex')
+exports['blake2b-24'] = Buffer.from('b203', 'hex')
+exports['blake2b-32'] = Buffer.from('b204', 'hex')
+exports['blake2b-40'] = Buffer.from('b205', 'hex')
+exports['blake2b-48'] = Buffer.from('b206', 'hex')
+exports['blake2b-56'] = Buffer.from('b207', 'hex')
+exports['blake2b-64'] = Buffer.from('b208', 'hex')
+exports['blake2b-72'] = Buffer.from('b209', 'hex')
+exports['blake2b-80'] = Buffer.from('b20a', 'hex')
+exports['blake2b-88'] = Buffer.from('b20b', 'hex')
+exports['blake2b-96'] = Buffer.from('b20c', 'hex')
+exports['blake2b-104'] = Buffer.from('b20d', 'hex')
+exports['blake2b-112'] = Buffer.from('b20e', 'hex')
+exports['blake2b-120'] = Buffer.from('b20f', 'hex')
+exports['blake2b-128'] = Buffer.from('b210', 'hex')
+exports['blake2b-136'] = Buffer.from('b211', 'hex')
+exports['blake2b-144'] = Buffer.from('b212', 'hex')
+exports['blake2b-152'] = Buffer.from('b213', 'hex')
+exports['blake2b-160'] = Buffer.from('b214', 'hex')
+exports['blake2b-168'] = Buffer.from('b215', 'hex')
+exports['blake2b-176'] = Buffer.from('b216', 'hex')
+exports['blake2b-184'] = Buffer.from('b217', 'hex')
+exports['blake2b-192'] = Buffer.from('b218', 'hex')
+exports['blake2b-200'] = Buffer.from('b219', 'hex')
+exports['blake2b-208'] = Buffer.from('b21a', 'hex')
+exports['blake2b-216'] = Buffer.from('b21b', 'hex')
+exports['blake2b-224'] = Buffer.from('b21c', 'hex')
+exports['blake2b-232'] = Buffer.from('b21d', 'hex')
+exports['blake2b-240'] = Buffer.from('b21e', 'hex')
+exports['blake2b-248'] = Buffer.from('b21f', 'hex')
+exports['blake2b-256'] = Buffer.from('b220', 'hex')
+exports['blake2b-264'] = Buffer.from('b221', 'hex')
+exports['blake2b-272'] = Buffer.from('b222', 'hex')
+exports['blake2b-280'] = Buffer.from('b223', 'hex')
+exports['blake2b-288'] = Buffer.from('b224', 'hex')
+exports['blake2b-296'] = Buffer.from('b225', 'hex')
+exports['blake2b-304'] = Buffer.from('b226', 'hex')
+exports['blake2b-312'] = Buffer.from('b227', 'hex')
+exports['blake2b-320'] = Buffer.from('b228', 'hex')
+exports['blake2b-328'] = Buffer.from('b229', 'hex')
+exports['blake2b-336'] = Buffer.from('b22a', 'hex')
+exports['blake2b-344'] = Buffer.from('b22b', 'hex')
+exports['blake2b-352'] = Buffer.from('b22c', 'hex')
+exports['blake2b-360'] = Buffer.from('b22d', 'hex')
+exports['blake2b-368'] = Buffer.from('b22e', 'hex')
+exports['blake2b-376'] = Buffer.from('b22f', 'hex')
+exports['blake2b-384'] = Buffer.from('b230', 'hex')
+exports['blake2b-392'] = Buffer.from('b231', 'hex')
+exports['blake2b-400'] = Buffer.from('b232', 'hex')
+exports['blake2b-408'] = Buffer.from('b233', 'hex')
+exports['blake2b-416'] = Buffer.from('b234', 'hex')
+exports['blake2b-424'] = Buffer.from('b235', 'hex')
+exports['blake2b-432'] = Buffer.from('b236', 'hex')
+exports['blake2b-440'] = Buffer.from('b237', 'hex')
+exports['blake2b-448'] = Buffer.from('b238', 'hex')
+exports['blake2b-456'] = Buffer.from('b239', 'hex')
+exports['blake2b-464'] = Buffer.from('b23a', 'hex')
+exports['blake2b-472'] = Buffer.from('b23b', 'hex')
+exports['blake2b-480'] = Buffer.from('b23c', 'hex')
+exports['blake2b-488'] = Buffer.from('b23d', 'hex')
+exports['blake2b-496'] = Buffer.from('b23e', 'hex')
+exports['blake2b-504'] = Buffer.from('b23f', 'hex')
+exports['blake2b-512'] = Buffer.from('b240', 'hex')
+exports['blake2s-8'] = Buffer.from('b241', 'hex')
+exports['blake2s-16'] = Buffer.from('b242', 'hex')
+exports['blake2s-24'] = Buffer.from('b243', 'hex')
+exports['blake2s-32'] = Buffer.from('b244', 'hex')
+exports['blake2s-40'] = Buffer.from('b245', 'hex')
+exports['blake2s-48'] = Buffer.from('b246', 'hex')
+exports['blake2s-56'] = Buffer.from('b247', 'hex')
+exports['blake2s-64'] = Buffer.from('b248', 'hex')
+exports['blake2s-72'] = Buffer.from('b249', 'hex')
+exports['blake2s-80'] = Buffer.from('b24a', 'hex')
+exports['blake2s-88'] = Buffer.from('b24b', 'hex')
+exports['blake2s-96'] = Buffer.from('b24c', 'hex')
+exports['blake2s-104'] = Buffer.from('b24d', 'hex')
+exports['blake2s-112'] = Buffer.from('b24e', 'hex')
+exports['blake2s-120'] = Buffer.from('b24f', 'hex')
+exports['blake2s-128'] = Buffer.from('b250', 'hex')
+exports['blake2s-136'] = Buffer.from('b251', 'hex')
+exports['blake2s-144'] = Buffer.from('b252', 'hex')
+exports['blake2s-152'] = Buffer.from('b253', 'hex')
+exports['blake2s-160'] = Buffer.from('b254', 'hex')
+exports['blake2s-168'] = Buffer.from('b255', 'hex')
+exports['blake2s-176'] = Buffer.from('b256', 'hex')
+exports['blake2s-184'] = Buffer.from('b257', 'hex')
+exports['blake2s-192'] = Buffer.from('b258', 'hex')
+exports['blake2s-200'] = Buffer.from('b259', 'hex')
+exports['blake2s-208'] = Buffer.from('b25a', 'hex')
+exports['blake2s-216'] = Buffer.from('b25b', 'hex')
+exports['blake2s-224'] = Buffer.from('b25c', 'hex')
+exports['blake2s-232'] = Buffer.from('b25d', 'hex')
+exports['blake2s-240'] = Buffer.from('b25e', 'hex')
+exports['blake2s-248'] = Buffer.from('b25f', 'hex')
+exports['blake2s-256'] = Buffer.from('b260', 'hex')
+exports['skein256-8'] = Buffer.from('b301', 'hex')
+exports['skein256-16'] = Buffer.from('b302', 'hex')
+exports['skein256-24'] = Buffer.from('b303', 'hex')
+exports['skein256-32'] = Buffer.from('b304', 'hex')
+exports['skein256-40'] = Buffer.from('b305', 'hex')
+exports['skein256-48'] = Buffer.from('b306', 'hex')
+exports['skein256-56'] = Buffer.from('b307', 'hex')
+exports['skein256-64'] = Buffer.from('b308', 'hex')
+exports['skein256-72'] = Buffer.from('b309', 'hex')
+exports['skein256-80'] = Buffer.from('b30a', 'hex')
+exports['skein256-88'] = Buffer.from('b30b', 'hex')
+exports['skein256-96'] = Buffer.from('b30c', 'hex')
+exports['skein256-104'] = Buffer.from('b30d', 'hex')
+exports['skein256-112'] = Buffer.from('b30e', 'hex')
+exports['skein256-120'] = Buffer.from('b30f', 'hex')
+exports['skein256-128'] = Buffer.from('b310', 'hex')
+exports['skein256-136'] = Buffer.from('b311', 'hex')
+exports['skein256-144'] = Buffer.from('b312', 'hex')
+exports['skein256-152'] = Buffer.from('b313', 'hex')
+exports['skein256-160'] = Buffer.from('b314', 'hex')
+exports['skein256-168'] = Buffer.from('b315', 'hex')
+exports['skein256-176'] = Buffer.from('b316', 'hex')
+exports['skein256-184'] = Buffer.from('b317', 'hex')
+exports['skein256-192'] = Buffer.from('b318', 'hex')
+exports['skein256-200'] = Buffer.from('b319', 'hex')
+exports['skein256-208'] = Buffer.from('b31a', 'hex')
+exports['skein256-216'] = Buffer.from('b31b', 'hex')
+exports['skein256-224'] = Buffer.from('b31c', 'hex')
+exports['skein256-232'] = Buffer.from('b31d', 'hex')
+exports['skein256-240'] = Buffer.from('b31e', 'hex')
+exports['skein256-248'] = Buffer.from('b31f', 'hex')
+exports['skein256-256'] = Buffer.from('b320', 'hex')
+exports['skein512-8'] = Buffer.from('b321', 'hex')
+exports['skein512-16'] = Buffer.from('b322', 'hex')
+exports['skein512-24'] = Buffer.from('b323', 'hex')
+exports['skein512-32'] = Buffer.from('b324', 'hex')
+exports['skein512-40'] = Buffer.from('b325', 'hex')
+exports['skein512-48'] = Buffer.from('b326', 'hex')
+exports['skein512-56'] = Buffer.from('b327', 'hex')
+exports['skein512-64'] = Buffer.from('b328', 'hex')
+exports['skein512-72'] = Buffer.from('b329', 'hex')
+exports['skein512-80'] = Buffer.from('b32a', 'hex')
+exports['skein512-88'] = Buffer.from('b32b', 'hex')
+exports['skein512-96'] = Buffer.from('b32c', 'hex')
+exports['skein512-104'] = Buffer.from('b32d', 'hex')
+exports['skein512-112'] = Buffer.from('b32e', 'hex')
+exports['skein512-120'] = Buffer.from('b32f', 'hex')
+exports['skein512-128'] = Buffer.from('b330', 'hex')
+exports['skein512-136'] = Buffer.from('b331', 'hex')
+exports['skein512-144'] = Buffer.from('b332', 'hex')
+exports['skein512-152'] = Buffer.from('b333', 'hex')
+exports['skein512-160'] = Buffer.from('b334', 'hex')
+exports['skein512-168'] = Buffer.from('b335', 'hex')
+exports['skein512-176'] = Buffer.from('b336', 'hex')
+exports['skein512-184'] = Buffer.from('b337', 'hex')
+exports['skein512-192'] = Buffer.from('b338', 'hex')
+exports['skein512-200'] = Buffer.from('b339', 'hex')
+exports['skein512-208'] = Buffer.from('b33a', 'hex')
+exports['skein512-216'] = Buffer.from('b33b', 'hex')
+exports['skein512-224'] = Buffer.from('b33c', 'hex')
+exports['skein512-232'] = Buffer.from('b33d', 'hex')
+exports['skein512-240'] = Buffer.from('b33e', 'hex')
+exports['skein512-248'] = Buffer.from('b33f', 'hex')
+exports['skein512-256'] = Buffer.from('b340', 'hex')
+exports['skein512-264'] = Buffer.from('b341', 'hex')
+exports['skein512-272'] = Buffer.from('b342', 'hex')
+exports['skein512-280'] = Buffer.from('b343', 'hex')
+exports['skein512-288'] = Buffer.from('b344', 'hex')
+exports['skein512-296'] = Buffer.from('b345', 'hex')
+exports['skein512-304'] = Buffer.from('b346', 'hex')
+exports['skein512-312'] = Buffer.from('b347', 'hex')
+exports['skein512-320'] = Buffer.from('b348', 'hex')
+exports['skein512-328'] = Buffer.from('b349', 'hex')
+exports['skein512-336'] = Buffer.from('b34a', 'hex')
+exports['skein512-344'] = Buffer.from('b34b', 'hex')
+exports['skein512-352'] = Buffer.from('b34c', 'hex')
+exports['skein512-360'] = Buffer.from('b34d', 'hex')
+exports['skein512-368'] = Buffer.from('b34e', 'hex')
+exports['skein512-376'] = Buffer.from('b34f', 'hex')
+exports['skein512-384'] = Buffer.from('b350', 'hex')
+exports['skein512-392'] = Buffer.from('b351', 'hex')
+exports['skein512-400'] = Buffer.from('b352', 'hex')
+exports['skein512-408'] = Buffer.from('b353', 'hex')
+exports['skein512-416'] = Buffer.from('b354', 'hex')
+exports['skein512-424'] = Buffer.from('b355', 'hex')
+exports['skein512-432'] = Buffer.from('b356', 'hex')
+exports['skein512-440'] = Buffer.from('b357', 'hex')
+exports['skein512-448'] = Buffer.from('b358', 'hex')
+exports['skein512-456'] = Buffer.from('b359', 'hex')
+exports['skein512-464'] = Buffer.from('b35a', 'hex')
+exports['skein512-472'] = Buffer.from('b35b', 'hex')
+exports['skein512-480'] = Buffer.from('b35c', 'hex')
+exports['skein512-488'] = Buffer.from('b35d', 'hex')
+exports['skein512-496'] = Buffer.from('b35e', 'hex')
+exports['skein512-504'] = Buffer.from('b35f', 'hex')
+exports['skein512-512'] = Buffer.from('b360', 'hex')
+exports['skein1024-8'] = Buffer.from('b361', 'hex')
+exports['skein1024-16'] = Buffer.from('b362', 'hex')
+exports['skein1024-24'] = Buffer.from('b363', 'hex')
+exports['skein1024-32'] = Buffer.from('b364', 'hex')
+exports['skein1024-40'] = Buffer.from('b365', 'hex')
+exports['skein1024-48'] = Buffer.from('b366', 'hex')
+exports['skein1024-56'] = Buffer.from('b367', 'hex')
+exports['skein1024-64'] = Buffer.from('b368', 'hex')
+exports['skein1024-72'] = Buffer.from('b369', 'hex')
+exports['skein1024-80'] = Buffer.from('b36a', 'hex')
+exports['skein1024-88'] = Buffer.from('b36b', 'hex')
+exports['skein1024-96'] = Buffer.from('b36c', 'hex')
+exports['skein1024-104'] = Buffer.from('b36d', 'hex')
+exports['skein1024-112'] = Buffer.from('b36e', 'hex')
+exports['skein1024-120'] = Buffer.from('b36f', 'hex')
+exports['skein1024-128'] = Buffer.from('b370', 'hex')
+exports['skein1024-136'] = Buffer.from('b371', 'hex')
+exports['skein1024-144'] = Buffer.from('b372', 'hex')
+exports['skein1024-152'] = Buffer.from('b373', 'hex')
+exports['skein1024-160'] = Buffer.from('b374', 'hex')
+exports['skein1024-168'] = Buffer.from('b375', 'hex')
+exports['skein1024-176'] = Buffer.from('b376', 'hex')
+exports['skein1024-184'] = Buffer.from('b377', 'hex')
+exports['skein1024-192'] = Buffer.from('b378', 'hex')
+exports['skein1024-200'] = Buffer.from('b379', 'hex')
+exports['skein1024-208'] = Buffer.from('b37a', 'hex')
+exports['skein1024-216'] = Buffer.from('b37b', 'hex')
+exports['skein1024-224'] = Buffer.from('b37c', 'hex')
+exports['skein1024-232'] = Buffer.from('b37d', 'hex')
+exports['skein1024-240'] = Buffer.from('b37e', 'hex')
+exports['skein1024-248'] = Buffer.from('b37f', 'hex')
+exports['skein1024-256'] = Buffer.from('b380', 'hex')
+exports['skein1024-264'] = Buffer.from('b381', 'hex')
+exports['skein1024-272'] = Buffer.from('b382', 'hex')
+exports['skein1024-280'] = Buffer.from('b383', 'hex')
+exports['skein1024-288'] = Buffer.from('b384', 'hex')
+exports['skein1024-296'] = Buffer.from('b385', 'hex')
+exports['skein1024-304'] = Buffer.from('b386', 'hex')
+exports['skein1024-312'] = Buffer.from('b387', 'hex')
+exports['skein1024-320'] = Buffer.from('b388', 'hex')
+exports['skein1024-328'] = Buffer.from('b389', 'hex')
+exports['skein1024-336'] = Buffer.from('b38a', 'hex')
+exports['skein1024-344'] = Buffer.from('b38b', 'hex')
+exports['skein1024-352'] = Buffer.from('b38c', 'hex')
+exports['skein1024-360'] = Buffer.from('b38d', 'hex')
+exports['skein1024-368'] = Buffer.from('b38e', 'hex')
+exports['skein1024-376'] = Buffer.from('b38f', 'hex')
+exports['skein1024-384'] = Buffer.from('b390', 'hex')
+exports['skein1024-392'] = Buffer.from('b391', 'hex')
+exports['skein1024-400'] = Buffer.from('b392', 'hex')
+exports['skein1024-408'] = Buffer.from('b393', 'hex')
+exports['skein1024-416'] = Buffer.from('b394', 'hex')
+exports['skein1024-424'] = Buffer.from('b395', 'hex')
+exports['skein1024-432'] = Buffer.from('b396', 'hex')
+exports['skein1024-440'] = Buffer.from('b397', 'hex')
+exports['skein1024-448'] = Buffer.from('b398', 'hex')
+exports['skein1024-456'] = Buffer.from('b399', 'hex')
+exports['skein1024-464'] = Buffer.from('b39a', 'hex')
+exports['skein1024-472'] = Buffer.from('b39b', 'hex')
+exports['skein1024-480'] = Buffer.from('b39c', 'hex')
+exports['skein1024-488'] = Buffer.from('b39d', 'hex')
+exports['skein1024-496'] = Buffer.from('b39e', 'hex')
+exports['skein1024-504'] = Buffer.from('b39f', 'hex')
+exports['skein1024-512'] = Buffer.from('b3a0', 'hex')
+exports['skein1024-520'] = Buffer.from('b3a1', 'hex')
+exports['skein1024-528'] = Buffer.from('b3a2', 'hex')
+exports['skein1024-536'] = Buffer.from('b3a3', 'hex')
+exports['skein1024-544'] = Buffer.from('b3a4', 'hex')
+exports['skein1024-552'] = Buffer.from('b3a5', 'hex')
+exports['skein1024-560'] = Buffer.from('b3a6', 'hex')
+exports['skein1024-568'] = Buffer.from('b3a7', 'hex')
+exports['skein1024-576'] = Buffer.from('b3a8', 'hex')
+exports['skein1024-584'] = Buffer.from('b3a9', 'hex')
+exports['skein1024-592'] = Buffer.from('b3aa', 'hex')
+exports['skein1024-600'] = Buffer.from('b3ab', 'hex')
+exports['skein1024-608'] = Buffer.from('b3ac', 'hex')
+exports['skein1024-616'] = Buffer.from('b3ad', 'hex')
+exports['skein1024-624'] = Buffer.from('b3ae', 'hex')
+exports['skein1024-632'] = Buffer.from('b3af', 'hex')
+exports['skein1024-640'] = Buffer.from('b3b0', 'hex')
+exports['skein1024-648'] = Buffer.from('b3b1', 'hex')
+exports['skein1024-656'] = Buffer.from('b3b2', 'hex')
+exports['skein1024-664'] = Buffer.from('b3b3', 'hex')
+exports['skein1024-672'] = Buffer.from('b3b4', 'hex')
+exports['skein1024-680'] = Buffer.from('b3b5', 'hex')
+exports['skein1024-688'] = Buffer.from('b3b6', 'hex')
+exports['skein1024-696'] = Buffer.from('b3b7', 'hex')
+exports['skein1024-704'] = Buffer.from('b3b8', 'hex')
+exports['skein1024-712'] = Buffer.from('b3b9', 'hex')
+exports['skein1024-720'] = Buffer.from('b3ba', 'hex')
+exports['skein1024-728'] = Buffer.from('b3bb', 'hex')
+exports['skein1024-736'] = Buffer.from('b3bc', 'hex')
+exports['skein1024-744'] = Buffer.from('b3bd', 'hex')
+exports['skein1024-752'] = Buffer.from('b3be', 'hex')
+exports['skein1024-760'] = Buffer.from('b3bf', 'hex')
+exports['skein1024-768'] = Buffer.from('b3c0', 'hex')
+exports['skein1024-776'] = Buffer.from('b3c1', 'hex')
+exports['skein1024-784'] = Buffer.from('b3c2', 'hex')
+exports['skein1024-792'] = Buffer.from('b3c3', 'hex')
+exports['skein1024-800'] = Buffer.from('b3c4', 'hex')
+exports['skein1024-808'] = Buffer.from('b3c5', 'hex')
+exports['skein1024-816'] = Buffer.from('b3c6', 'hex')
+exports['skein1024-824'] = Buffer.from('b3c7', 'hex')
+exports['skein1024-832'] = Buffer.from('b3c8', 'hex')
+exports['skein1024-840'] = Buffer.from('b3c9', 'hex')
+exports['skein1024-848'] = Buffer.from('b3ca', 'hex')
+exports['skein1024-856'] = Buffer.from('b3cb', 'hex')
+exports['skein1024-864'] = Buffer.from('b3cc', 'hex')
+exports['skein1024-872'] = Buffer.from('b3cd', 'hex')
+exports['skein1024-880'] = Buffer.from('b3ce', 'hex')
+exports['skein1024-888'] = Buffer.from('b3cf', 'hex')
+exports['skein1024-896'] = Buffer.from('b3d0', 'hex')
+exports['skein1024-904'] = Buffer.from('b3d1', 'hex')
+exports['skein1024-912'] = Buffer.from('b3d2', 'hex')
+exports['skein1024-920'] = Buffer.from('b3d3', 'hex')
+exports['skein1024-928'] = Buffer.from('b3d4', 'hex')
+exports['skein1024-936'] = Buffer.from('b3d5', 'hex')
+exports['skein1024-944'] = Buffer.from('b3d6', 'hex')
+exports['skein1024-952'] = Buffer.from('b3d7', 'hex')
+exports['skein1024-960'] = Buffer.from('b3d8', 'hex')
+exports['skein1024-968'] = Buffer.from('b3d9', 'hex')
+exports['skein1024-976'] = Buffer.from('b3da', 'hex')
+exports['skein1024-984'] = Buffer.from('b3db', 'hex')
+exports['skein1024-992'] = Buffer.from('b3dc', 'hex')
+exports['skein1024-1000'] = Buffer.from('b3dd', 'hex')
+exports['skein1024-1008'] = Buffer.from('b3de', 'hex')
+exports['skein1024-1016'] = Buffer.from('b3df', 'hex')
+exports['skein1024-1024'] = Buffer.from('b3e0', 'hex')
+
+// multiaddrs
+exports['ip4'] = Buffer.from('04', 'hex')
+exports['ip6'] = Buffer.from('29', 'hex')
+exports['tcp'] = Buffer.from('06', 'hex')
+exports['udp'] = Buffer.from('0111', 'hex')
+exports['dccp'] = Buffer.from('21', 'hex')
+exports['sctp'] = Buffer.from('84', 'hex')
+exports['udt'] = Buffer.from('012d', 'hex')
+exports['utp'] = Buffer.from('012e', 'hex')
+exports['ipfs'] = Buffer.from('01a5', 'hex')
+exports['http'] = Buffer.from('01e0', 'hex')
+exports['https'] = Buffer.from('01bb', 'hex')
+exports['quic'] = Buffer.from('01cc', 'hex')
+exports['ws'] = Buffer.from('01dd', 'hex')
+exports['onion'] = Buffer.from('01bc', 'hex')
+exports['p2p-circuit'] = Buffer.from('0122', 'hex')
+
+// archiving formats
+
+// image formats
+
+// video formats
+
+// VCS formats
+exports['git-raw'] = Buffer.from('78', 'hex')
+
+// IPLD formats
+exports['dag-pb'] = Buffer.from('70', 'hex')
+exports['dag-cbor'] = Buffer.from('71', 'hex')
+exports['git-raw'] = Buffer.from('78', 'hex')
+exports['eth-block'] = Buffer.from('90', 'hex')
+exports['eth-block-list'] = Buffer.from('91', 'hex')
+exports['eth-tx-trie'] = Buffer.from('92', 'hex')
+exports['eth-tx'] = Buffer.from('93', 'hex')
+exports['eth-tx-receipt-trie'] = Buffer.from('94', 'hex')
+exports['eth-tx-receipt'] = Buffer.from('95', 'hex')
+exports['eth-state-trie'] = Buffer.from('96', 'hex')
+exports['eth-account-snapshot'] = Buffer.from('97', 'hex')
+exports['eth-storage-trie'] = Buffer.from('98', 'hex')
+
+exports['bitcoin-block'] = Buffer.from('b0', 'hex')
+exports['bitcoin-tx'] = Buffer.from('b1', 'hex')
+exports['zcash-block'] = Buffer.from('c0', 'hex')
+exports['zcash-tx'] = Buffer.from('c1', 'hex')
+exports['stellar-block'] = Buffer.from('d0', 'hex')
+exports['stellar-tx'] = Buffer.from('d1', 'hex')
+
+exports['torrent-info'] = Buffer.from('7b', 'hex')
+exports['torrent-file'] = Buffer.from('7c', 'hex')
+exports['ed25519-pub'] = Buffer.from('ed', 'hex')
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":5}],7:[function(require,module,exports){
+(function (Buffer){
+/**
+ * Implementation of the multicodec specification.
+ *
+ * @module multicodec
+ * @example
+ * const multicodec = require('multicodec')
+ *
+ * const prefixedProtobuf = multicodec.addPrefix('protobuf', protobufBuffer)
+ * // prefixedProtobuf 0x50...
+ *
+ */
+'use strict'
+
+const varint = require('varint')
+const codecNameToCodeVarint = require('./varint-table')
+const codeToCodecName = require('./name-table')
+const util = require('./util')
+
+exports = module.exports
+
+/**
+ * Prefix a buffer with a multicodec-packed.
+ *
+ * @param {string|number} multicodecStrOrCode
+ * @param {Buffer} data
+ * @returns {Buffer}
+ */
+exports.addPrefix = (multicodecStrOrCode, data) => {
+  let prefix
+
+  if (Buffer.isBuffer(multicodecStrOrCode)) {
+    prefix = util.varintBufferEncode(multicodecStrOrCode)
+  } else {
+    if (codecNameToCodeVarint[multicodecStrOrCode]) {
+      prefix = codecNameToCodeVarint[multicodecStrOrCode]
+    } else {
+      throw new Error('multicodec not recognized')
+    }
+  }
+  return Buffer.concat([prefix, data])
+}
+
+/**
+ * Decapsulate the multicodec-packed prefix from the data.
+ *
+ * @param {Buffer} data
+ * @returns {Buffer}
+ */
+exports.rmPrefix = (data) => {
+  varint.decode(data)
+  return data.slice(varint.decode.bytes)
+}
+
+/**
+ * Get the codec of the prefixed data.
+ * @param {Buffer} prefixedData
+ * @returns {string}
+ */
+exports.getCodec = (prefixedData) => {
+  const code = util.varintBufferDecode(prefixedData)
+  const codecName = codeToCodecName[code.toString('hex')]
+  if (codecName === undefined) {
+    throw new Error('Code `0x' + code.toString('hex') + '` not found')
+  }
+  return codecName
+}
+
+/**
+ * Get the code as varint of a codec name.
+ * @param {string} codecName
+ * @returns {Buffer}
+ */
+exports.getCodeVarint = (codecName) => {
+  const code = codecNameToCodeVarint[codecName]
+  if (code === undefined) {
+    throw new Error('Codec `' + codecName + '` not found')
+  }
+  return code
+}
+
+/**
+ * Add a new codec
+ * @param {string} name Name of the codec
+ * @param {Buffer} code The code of the codec
+ * @returns {void}
+ */
+exports.addCodec = (name, code) => {
+  codecNameToCodeVarint[name] = util.varintBufferEncode(code)
+  codeToCodecName[code.toString('hex')] = name
+}
+
+}).call(this,require("buffer").Buffer)
+},{"./name-table":8,"./util":9,"./varint-table":10,"buffer":5,"varint":33}],8:[function(require,module,exports){
+'use strict'
+const baseTable = require('./base-table')
+
+// this creates a map for code as hexString -> codecName
+
+const nameTable = {}
+module.exports = nameTable
+
+for (let encodingName in baseTable) {
+  let code = baseTable[encodingName]
+  nameTable[code.toString('hex')] = encodingName
+}
+
+},{"./base-table":6}],9:[function(require,module,exports){
+(function (Buffer){
+'use strict'
+const varint = require('varint')
+
+module.exports = {
+  numberToBuffer,
+  bufferToNumber,
+  varintBufferEncode,
+  varintBufferDecode
+}
+
+function bufferToNumber (buf) {
+  return parseInt(buf.toString('hex'), 16)
+}
+
+function numberToBuffer (num) {
+  let hexString = num.toString(16)
+  if (hexString.length % 2 === 1) {
+    hexString = '0' + hexString
+  }
+  return Buffer.from(hexString, 'hex')
+}
+
+function varintBufferEncode (input) {
+  return Buffer.from(varint.encode(bufferToNumber(input)))
+}
+
+function varintBufferDecode (input) {
+  return numberToBuffer(varint.decode(input))
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":5,"varint":33}],10:[function(require,module,exports){
+'use strict'
+const baseTable = require('./base-table')
+const varintBufferEncode = require('./util').varintBufferEncode
+
+// this creates a map for codecName -> codeVarintBuffer
+
+const varintTable = {}
+module.exports = varintTable
+
+for (let encodingName in baseTable) {
+  let code = baseTable[encodingName]
+  varintTable[encodingName] = varintBufferEncode(code)
+}
+
+},{"./base-table":6,"./util":9}],11:[function(require,module,exports){
+(function (Buffer){
+'use strict'
+
+const mh = require('multihashes')
+
+var CIDUtil = {
+  /**
+   * Test if the given input is a valid CID object.
+   * Returns an error message if it is not.
+   * Returns undefined if it is a valid CID.
+   *
+   * @param {any} other
+   * @returns {string}
+   */
+  checkCIDComponents: function (other) {
+    if (other == null) {
+      return 'null values are not valid CIDs'
+    }
+
+    if (!(other.version === 0 || other.version === 1)) {
+      return 'Invalid version, must be a number equal to 1 or 0'
+    }
+
+    if (typeof other.codec !== 'string') {
+      return 'codec must be string'
+    }
+
+    if (!Buffer.isBuffer(other.multihash)) {
+      return 'multihash must be a Buffer'
+    }
+
+    try {
+      mh.validate(other.multihash)
+    } catch (err) {
+      let errorMsg = err.message
+      if (!errorMsg) { // Just in case mh.validate() throws an error with empty error message
+        errorMsg = 'Multihash validation failed'
+      }
+      return errorMsg
+    }
+  }
+}
+
+module.exports = CIDUtil
+
+}).call(this,{"isBuffer":require("../../is-buffer/index.js")})
+},{"../../is-buffer/index.js":15,"multihashes":29}],12:[function(require,module,exports){
+(function (Buffer){
+'use strict'
+
+const mh = require('multihashes')
+const multibase = require('multibase')
+const multicodec = require('multicodec')
+const codecs = require('multicodec/src/base-table')
+const CIDUtil = require('./cid-util')
+const withIs = require('class-is')
+
+/**
+ * @typedef {Object} SerializedCID
+ * @param {string} codec
+ * @param {number} version
+ * @param {Buffer} multihash
+ *
+ */
+
+/**
+ * Test if the given input is a CID.
+ * @function isCID
+ * @memberof CID
+ * @static
+ * @param {any} other
+ * @returns {bool}
+ */
+
+/**
+ * Class representing a CID `<mbase><version><mcodec><mhash>`
+ * , as defined in [ipld/cid](https://github.com/multiformats/cid).
+ * @class CID
+ */
+class CID {
+  /**
+   * Create a new CID.
+   *
+   * The algorithm for argument input is roughly:
+   * ```
+   * if (str)
+   *   if (1st char is on multibase table) -> CID String
+   *   else -> bs58 encoded multihash
+   * else if (Buffer)
+   *   if (0 or 1) -> CID
+   *   else -> multihash
+   * else if (Number)
+   *   -> construct CID by parts
+   *
+   * ..if only JS had traits..
+   * ```
+   *
+   * @param {string|Buffer} version
+   * @param {string} [codec]
+   * @param {Buffer} [multihash]
+   *
+   * @example
+   *
+   * new CID(<version>, <codec>, <multihash>)
+   * new CID(<cidStr>)
+   * new CID(<cid.buffer>)
+   * new CID(<multihash>)
+   * new CID(<bs58 encoded multihash>)
+   * new CID(<cid>)
+   *
+   */
+  constructor (version, codec, multihash) {
+    if (module.exports.isCID(version)) {
+      let cid = version
+      this.version = cid.version
+      this.codec = cid.codec
+      this.multihash = Buffer.from(cid.multihash)
+      return
+    }
+    if (typeof version === 'string') {
+      if (multibase.isEncoded(version)) { // CID String (encoded with multibase)
+        const cid = multibase.decode(version)
+        version = parseInt(cid.slice(0, 1).toString('hex'), 16)
+        codec = multicodec.getCodec(cid.slice(1))
+        multihash = multicodec.rmPrefix(cid.slice(1))
+      } else { // bs58 string encoded multihash
+        codec = 'dag-pb'
+        multihash = mh.fromB58String(version)
+        version = 0
+      }
+    } else if (Buffer.isBuffer(version)) {
+      const firstByte = version.slice(0, 1)
+      const v = parseInt(firstByte.toString('hex'), 16)
+      if (v === 0 || v === 1) { // CID
+        const cid = version
+        version = v
+        codec = multicodec.getCodec(cid.slice(1))
+        multihash = multicodec.rmPrefix(cid.slice(1))
+      } else { // multihash
+        codec = 'dag-pb'
+        multihash = version
+        version = 0
+      }
+    }
+
+    /**
+     * @type {string}
+     */
+    this.codec = codec
+
+    /**
+     * @type {number}
+     */
+    this.version = version
+
+    /**
+     * @type {Buffer}
+     */
+    this.multihash = multihash
+
+    CID.validateCID(this)
+  }
+
+  /**
+   * The CID as a `Buffer`
+   *
+   * @return {Buffer}
+   * @readonly
+   *
+   * @memberOf CID
+   */
+  get buffer () {
+    switch (this.version) {
+      case 0:
+        return this.multihash
+      case 1:
+        return Buffer.concat([
+          Buffer.from('01', 'hex'),
+          multicodec.getCodeVarint(this.codec),
+          this.multihash
+        ])
+      default:
+        throw new Error('unsupported version')
+    }
+  }
+
+  /**
+   * Get the prefix of the CID.
+   *
+   * @returns {Buffer}
+   * @readonly
+   */
+  get prefix () {
+    return Buffer.concat([
+      Buffer.from(`0${this.version}`, 'hex'),
+      multicodec.getCodeVarint(this.codec),
+      mh.prefix(this.multihash)
+    ])
+  }
+
+  /**
+   * Convert to a CID of version `0`.
+   *
+   * @returns {CID}
+   */
+  toV0 () {
+    if (this.codec !== 'dag-pb') {
+      throw new Error('Cannot convert a non dag-pb CID to CIDv0')
+    }
+
+    const { name, length } = mh.decode(this.multihash)
+
+    if (name !== 'sha2-256') {
+      throw new Error('Cannot convert non sha2-256 multihash CID to CIDv0')
+    }
+
+    if (length !== 32) {
+      throw new Error('Cannot convert non 32 byte multihash CID to CIDv0')
+    }
+
+    return new _CID(0, this.codec, this.multihash)
+  }
+
+  /**
+   * Convert to a CID of version `1`.
+   *
+   * @returns {CID}
+   */
+  toV1 () {
+    return new _CID(1, this.codec, this.multihash)
+  }
+
+  /**
+   * Encode the CID into a string.
+   *
+   * @param {string} [base='base58btc'] - Base encoding to use.
+   * @returns {string}
+   */
+  toBaseEncodedString (base) {
+    base = base || 'base58btc'
+
+    switch (this.version) {
+      case 0: {
+        if (base !== 'base58btc') {
+          throw new Error('not supported with CIDv0, to support different bases, please migrate the instance do CIDv1, you can do that through cid.toV1()')
+        }
+        return mh.toB58String(this.multihash)
+      }
+      case 1:
+        return multibase.encode(base, this.buffer).toString()
+      default:
+        throw new Error('Unsupported version')
+    }
+  }
+
+  toString (base) {
+    return this.toBaseEncodedString(base)
+  }
+
+  /**
+   * Serialize to a plain object.
+   *
+   * @returns {SerializedCID}
+   */
+  toJSON () {
+    return {
+      codec: this.codec,
+      version: this.version,
+      hash: this.multihash
+    }
+  }
+
+  /**
+   * Compare equality with another CID.
+   *
+   * @param {CID} other
+   * @returns {bool}
+   */
+  equals (other) {
+    return this.codec === other.codec &&
+      this.version === other.version &&
+      this.multihash.equals(other.multihash)
+  }
+
+  /**
+   * Test if the given input is a valid CID object.
+   * Throws if it is not.
+   *
+   * @param {any} other
+   * @returns {void}
+   */
+  static validateCID (other) {
+    let errorMsg = CIDUtil.checkCIDComponents(other)
+    if (errorMsg) {
+      throw new Error(errorMsg)
+    }
+  }
+}
+
+const _CID = withIs(CID, {
+  className: 'CID',
+  symbolName: '@ipld/js-cid/CID'
+})
+
+_CID.codecs = codecs
+
+module.exports = _CID
+
+}).call(this,require("buffer").Buffer)
+},{"./cid-util":11,"buffer":5,"class-is":13,"multibase":22,"multicodec":7,"multicodec/src/base-table":6,"multihashes":29}],13:[function(require,module,exports){
+'use strict';
+
+function withIs(Class, { className, symbolName }) {
+    const symbol = Symbol.for(symbolName);
+
+    const ClassIsWrapper = {
+        // The code below assigns the class wrapper to an object to trick
+        // JavaScript engines to show the name of the extended class when
+        // logging an instances.
+        // We are assigning an anonymous class (class wrapper) to the object
+        // with key `className` to keep the correct name.
+        // If this is not supported it falls back to logging `ClassIsWrapper`.
+        [className]: class extends Class {
+            constructor(...args) {
+                super(...args);
+                Object.defineProperty(this, symbol, { value: true });
+            }
+
+            get [Symbol.toStringTag]() {
+                return className;
+            }
+        },
+    }[className];
+
+    ClassIsWrapper[`is${className}`] = (obj) => !!(obj && obj[symbol]);
+
+    return ClassIsWrapper;
+}
+
+function withIsProto(Class, { className, symbolName, withoutNew }) {
+    const symbol = Symbol.for(symbolName);
+
+    /* eslint-disable object-shorthand */
+    const ClassIsWrapper = {
+        [className]: function (...args) {
+            if (withoutNew && !(this instanceof ClassIsWrapper)) {
+                return new ClassIsWrapper(...args);
+            }
+
+            const _this = Class.call(this, ...args) || this;
+
+            if (_this && !_this[symbol]) {
+                Object.defineProperty(_this, symbol, { value: true });
+            }
+
+            return _this;
+        },
+    }[className];
+    /* eslint-enable object-shorthand */
+
+    ClassIsWrapper.prototype = Object.create(Class.prototype);
+    ClassIsWrapper.prototype.constructor = ClassIsWrapper;
+
+    Object.defineProperty(ClassIsWrapper.prototype, Symbol.toStringTag, {
+        get() {
+            return className;
+        },
+    });
+
+    ClassIsWrapper[`is${className}`] = (obj) => !!(obj && obj[symbol]);
+
+    return ClassIsWrapper;
+}
+
+module.exports = withIs;
+module.exports.proto = withIsProto;
+
+},{}],14:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = (nBytes * 8) - mLen - 1
@@ -2344,7 +3293,487 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],7:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
+/*!
+ * Determine if an object is a Buffer
+ *
+ * @author   Feross Aboukhadijeh <https://feross.org>
+ * @license  MIT
+ */
+
+// The _isBuffer check is for Safari 5-7 support, because it's missing
+// Object.prototype.constructor. Remove this eventually
+module.exports = function (obj) {
+  return obj != null && (isBuffer(obj) || isSlowBuffer(obj) || !!obj._isBuffer)
+}
+
+function isBuffer (obj) {
+  return !!obj.constructor && typeof obj.constructor.isBuffer === 'function' && obj.constructor.isBuffer(obj)
+}
+
+// For Node v0.10 support. Remove this eventually.
+function isSlowBuffer (obj) {
+  return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isBuffer(obj.slice(0, 0))
+}
+
+},{}],16:[function(require,module,exports){
+// base-x encoding
+// Forked from https://github.com/cryptocoinjs/bs58
+// Originally written by Mike Hearn for BitcoinJ
+// Copyright (c) 2011 Google Inc
+// Ported to JavaScript by Stefan Thomas
+// Merged Buffer refactorings from base58-native by Stephen Pair
+// Copyright (c) 2013 BitPay Inc
+
+var Buffer = require('safe-buffer').Buffer
+
+module.exports = function base (ALPHABET) {
+  var ALPHABET_MAP = {}
+  var BASE = ALPHABET.length
+  var LEADER = ALPHABET.charAt(0)
+
+  // pre-compute lookup table
+  for (var z = 0; z < ALPHABET.length; z++) {
+    var x = ALPHABET.charAt(z)
+
+    if (ALPHABET_MAP[x] !== undefined) throw new TypeError(x + ' is ambiguous')
+    ALPHABET_MAP[x] = z
+  }
+
+  function encode (source) {
+    if (source.length === 0) return ''
+
+    var digits = [0]
+    for (var i = 0; i < source.length; ++i) {
+      for (var j = 0, carry = source[i]; j < digits.length; ++j) {
+        carry += digits[j] << 8
+        digits[j] = carry % BASE
+        carry = (carry / BASE) | 0
+      }
+
+      while (carry > 0) {
+        digits.push(carry % BASE)
+        carry = (carry / BASE) | 0
+      }
+    }
+
+    var string = ''
+
+    // deal with leading zeros
+    for (var k = 0; source[k] === 0 && k < source.length - 1; ++k) string += LEADER
+    // convert digits to a string
+    for (var q = digits.length - 1; q >= 0; --q) string += ALPHABET[digits[q]]
+
+    return string
+  }
+
+  function decodeUnsafe (string) {
+    if (typeof string !== 'string') throw new TypeError('Expected String')
+    if (string.length === 0) return Buffer.allocUnsafe(0)
+
+    var bytes = [0]
+    for (var i = 0; i < string.length; i++) {
+      var value = ALPHABET_MAP[string[i]]
+      if (value === undefined) return
+
+      for (var j = 0, carry = value; j < bytes.length; ++j) {
+        carry += bytes[j] * BASE
+        bytes[j] = carry & 0xff
+        carry >>= 8
+      }
+
+      while (carry > 0) {
+        bytes.push(carry & 0xff)
+        carry >>= 8
+      }
+    }
+
+    // deal with leading zeros
+    for (var k = 0; string[k] === LEADER && k < string.length - 1; ++k) {
+      bytes.push(0)
+    }
+
+    return Buffer.from(bytes.reverse())
+  }
+
+  function decode (string) {
+    var buffer = decodeUnsafe(string)
+    if (buffer) return buffer
+
+    throw new Error('Non-base' + BASE + ' character')
+  }
+
+  return {
+    encode: encode,
+    decodeUnsafe: decodeUnsafe,
+    decode: decode
+  }
+}
+
+},{"safe-buffer":30}],17:[function(require,module,exports){
+'use strict'
+
+class Base {
+  constructor (name, code, implementation, alphabet) {
+    this.name = name
+    this.code = code
+    this.alphabet = alphabet
+    if (implementation && alphabet) {
+      this.engine = implementation(alphabet)
+    }
+  }
+
+  encode (stringOrBuffer) {
+    return this.engine.encode(stringOrBuffer)
+  }
+
+  decode (stringOrBuffer) {
+    return this.engine.decode(stringOrBuffer)
+  }
+
+  isImplemented () {
+    return this.engine
+  }
+}
+
+module.exports = Base
+
+},{}],18:[function(require,module,exports){
+(function (Buffer){
+'use strict'
+
+module.exports = function base16 (alphabet) {
+  return {
+    encode (input) {
+      if (typeof input === 'string') {
+        return Buffer.from(input).toString('hex')
+      }
+      return input.toString('hex')
+    },
+    decode (input) {
+      for (let char of input) {
+        if (alphabet.indexOf(char) < 0) {
+          throw new Error('invalid base16 character')
+        }
+      }
+      return Buffer.from(input, 'hex')
+    }
+  }
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":5}],19:[function(require,module,exports){
+(function (Buffer){
+'use strict'
+
+function decode (input, alphabet) {
+  input = input.replace(new RegExp('=', 'g'), '')
+  let length = input.length
+
+  let bits = 0
+  let value = 0
+
+  let index = 0
+  let output = new Uint8Array((length * 5 / 8) | 0)
+
+  for (let i = 0; i < length; i++) {
+    value = (value << 5) | alphabet.indexOf(input[i])
+    bits += 5
+
+    if (bits >= 8) {
+      output[index++] = (value >>> (bits - 8)) & 255
+      bits -= 8
+    }
+  }
+
+  return output.buffer
+}
+
+function encode (buffer, alphabet) {
+  let length = buffer.byteLength
+  let view = new Uint8Array(buffer)
+  let padding = alphabet.indexOf('=') === alphabet.length - 1
+
+  if (padding) {
+    alphabet = alphabet.substring(0, alphabet.length - 2)
+  }
+
+  let bits = 0
+  let value = 0
+  let output = ''
+
+  for (let i = 0; i < length; i++) {
+    value = (value << 8) | view[i]
+    bits += 8
+
+    while (bits >= 5) {
+      output += alphabet[(value >>> (bits - 5)) & 31]
+      bits -= 5
+    }
+  }
+
+  if (bits > 0) {
+    output += alphabet[(value << (5 - bits)) & 31]
+  }
+
+  if (padding) {
+    while ((output.length % 8) !== 0) {
+      output += '='
+    }
+  }
+
+  return output
+}
+
+module.exports = function base32 (alphabet) {
+  return {
+    encode (input) {
+      if (typeof input === 'string') {
+        return encode(Buffer.from(input), alphabet)
+      }
+
+      return encode(input, alphabet)
+    },
+    decode (input) {
+      for (let char of input) {
+        if (alphabet.indexOf(char) < 0) {
+          throw new Error('invalid base32 character')
+        }
+      }
+
+      return decode(input, alphabet)
+    }
+  }
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":5}],20:[function(require,module,exports){
+(function (Buffer){
+'use strict'
+
+module.exports = function base64 (alphabet) {
+  // The alphabet is only used to know:
+  //   1. If padding is enabled (must contain '=')
+  //   2. If the output must be url-safe (must contain '-' and '_')
+  //   3. If the input of the output function is valid
+  // The alphabets from RFC 4648 are always used.
+  const padding = alphabet.indexOf('=') > -1
+  const url = alphabet.indexOf('-') > -1 && alphabet.indexOf('_') > -1
+
+  return {
+    encode (input) {
+      let output = ''
+
+      if (typeof input === 'string') {
+        output = Buffer.from(input).toString('base64')
+      } else {
+        output = input.toString('base64')
+      }
+
+      if (url) {
+        output = output.replace(/\+/g, '-').replace(/\//g, '_')
+      }
+
+      const pad = output.indexOf('=')
+      if (pad > 0 && !padding) {
+        output = output.substring(0, pad)
+      }
+
+      return output
+    },
+    decode (input) {
+      for (let char of input) {
+        if (alphabet.indexOf(char) < 0) {
+          throw new Error('invalid base64 character')
+        }
+      }
+
+      return Buffer.from(input, 'base64')
+    }
+  }
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":5}],21:[function(require,module,exports){
+'use strict'
+
+const Base = require('./base.js')
+const baseX = require('base-x')
+const base16 = require('./base16')
+const base32 = require('./base32')
+const base64 = require('./base64')
+
+// name, code, implementation, alphabet
+const constants = [
+  ['base1', '1', '', '1'],
+  ['base2', '0', baseX, '01'],
+  ['base8', '7', baseX, '01234567'],
+  ['base10', '9', baseX, '0123456789'],
+  ['base16', 'f', base16, '0123456789abcdef'],
+  ['base32', 'b', base32, 'abcdefghijklmnopqrstuvwxyz234567'],
+  ['base32pad', 'c', base32, 'abcdefghijklmnopqrstuvwxyz234567='],
+  ['base32hex', 'v', base32, '0123456789abcdefghijklmnopqrstuv'],
+  ['base32hexpad', 't', base32, '0123456789abcdefghijklmnopqrstuv='],
+  ['base32z', 'h', base32, 'ybndrfg8ejkmcpqxot1uwisza345h769'],
+  ['base58flickr', 'Z', baseX, '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'],
+  ['base58btc', 'z', baseX, '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'],
+  ['base64', 'm', base64, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'],
+  ['base64pad', 'M', base64, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='],
+  ['base64url', 'u', base64, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'],
+  ['base64urlpad', 'U', base64, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=']
+]
+
+const names = constants.reduce((prev, tupple) => {
+  prev[tupple[0]] = new Base(tupple[0], tupple[1], tupple[2], tupple[3])
+  return prev
+}, {})
+
+const codes = constants.reduce((prev, tupple) => {
+  prev[tupple[1]] = names[tupple[0]]
+  return prev
+}, {})
+
+module.exports = {
+  names: names,
+  codes: codes
+}
+
+},{"./base.js":17,"./base16":18,"./base32":19,"./base64":20,"base-x":16}],22:[function(require,module,exports){
+(function (Buffer){
+/**
+ * Implementation of the [multibase](https://github.com/multiformats/multibase) specification.
+ * @module Multibase
+ */
+'use strict'
+
+const constants = require('./constants')
+
+exports = module.exports = multibase
+exports.encode = encode
+exports.decode = decode
+exports.isEncoded = isEncoded
+exports.names = Object.freeze(Object.keys(constants.names))
+exports.codes = Object.freeze(Object.keys(constants.codes))
+
+const errNotSupported = new Error('Unsupported encoding')
+
+/**
+ * Create a new buffer with the multibase varint+code.
+ *
+ * @param {string|number} nameOrCode - The multibase name or code number.
+ * @param {Buffer} buf - The data to be prefixed with multibase.
+ * @memberof Multibase
+ * @returns {Buffer}
+ */
+function multibase (nameOrCode, buf) {
+  if (!buf) {
+    throw new Error('requires an encoded buffer')
+  }
+  const base = getBase(nameOrCode)
+  const codeBuf = Buffer.from(base.code)
+
+  const name = base.name
+  validEncode(name, buf)
+  return Buffer.concat([codeBuf, buf])
+}
+
+/**
+ * Encode data with the specified base and add the multibase prefix.
+ *
+ * @param {string|number} nameOrCode - The multibase name or code number.
+ * @param {Buffer} buf - The data to be encoded.
+ * @returns {Buffer}
+ * @memberof Multibase
+ */
+function encode (nameOrCode, buf) {
+  const base = getBase(nameOrCode)
+  const name = base.name
+
+  return multibase(name, Buffer.from(base.encode(buf)))
+}
+
+/**
+ * Takes a buffer or string encoded with multibase header, decodes it and
+ * returns the decoded buffer
+ *
+ * @param {Buffer|string} bufOrString
+ * @returns {Buffer}
+ * @memberof Multibase
+ *
+ */
+function decode (bufOrString) {
+  if (Buffer.isBuffer(bufOrString)) {
+    bufOrString = bufOrString.toString()
+  }
+
+  const code = bufOrString.substring(0, 1)
+  bufOrString = bufOrString.substring(1, bufOrString.length)
+
+  if (typeof bufOrString === 'string') {
+    bufOrString = Buffer.from(bufOrString)
+  }
+
+  const base = getBase(code)
+  return Buffer.from(base.decode(bufOrString.toString()))
+}
+
+/**
+ * Is the given data multibase encoded?
+ *
+ * @param {Buffer|string} bufOrString
+ * @returns {boolean}
+ * @memberof Multibase
+ */
+function isEncoded (bufOrString) {
+  if (Buffer.isBuffer(bufOrString)) {
+    bufOrString = bufOrString.toString()
+  }
+
+  // Ensure bufOrString is a string
+  if (Object.prototype.toString.call(bufOrString) !== '[object String]') {
+    return false
+  }
+
+  const code = bufOrString.substring(0, 1)
+  try {
+    const base = getBase(code)
+    return base.name
+  } catch (err) {
+    return false
+  }
+}
+
+/**
+ * @param {string} name
+ * @param {Buffer} buf
+ * @private
+ * @returns {undefined}
+ */
+function validEncode (name, buf) {
+  const base = getBase(name)
+  base.decode(buf.toString())
+}
+
+function getBase (nameOrCode) {
+  let base
+
+  if (constants.names[nameOrCode]) {
+    base = constants.names[nameOrCode]
+  } else if (constants.codes[nameOrCode]) {
+    base = constants.codes[nameOrCode]
+  } else {
+    throw errNotSupported
+  }
+
+  if (!base.isImplemented()) {
+    throw new Error('Base ' + nameOrCode + ' is not implemented yet')
+  }
+
+  return base
+}
+
+}).call(this,require("buffer").Buffer)
+},{"./constants":21,"buffer":5}],23:[function(require,module,exports){
 (function (Buffer){
 // THIS FILE IS GENERATED, DO NO EDIT MANUALLY
 // For more information see the README.md
@@ -2773,7 +4202,7 @@ exports['torrent-file'] = Buffer.from('7c', 'hex')
 exports['ed25519-pub'] = Buffer.from('ed', 'hex')
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],8:[function(require,module,exports){
+},{"buffer":5}],24:[function(require,module,exports){
 (function (Buffer){
 /**
  * Implementation of the multicodec specification.
@@ -2856,69 +4285,13 @@ exports.getCodeVarint = (codecName) => {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./name-table":9,"./util":10,"./varint-table":11,"buffer":5,"varint":17}],9:[function(require,module,exports){
-'use strict'
-const baseTable = require('./base-table')
-
-// this creates a map for code as hexString -> codecName
-
-const nameTable = {}
-module.exports = nameTable
-
-for (let encodingName in baseTable) {
-  let code = baseTable[encodingName]
-  nameTable[code.toString('hex')] = encodingName
-}
-
-},{"./base-table":7}],10:[function(require,module,exports){
-(function (Buffer){
-'use strict'
-const varint = require('varint')
-
-module.exports = {
-  numberToBuffer,
-  bufferToNumber,
-  varintBufferEncode,
-  varintBufferDecode
-}
-
-function bufferToNumber (buf) {
-  return parseInt(buf.toString('hex'), 16)
-}
-
-function numberToBuffer (num) {
-  let hexString = num.toString(16)
-  if (hexString.length % 2 === 1) {
-    hexString = '0' + hexString
-  }
-  return Buffer.from(hexString, 'hex')
-}
-
-function varintBufferEncode (input) {
-  return Buffer.from(varint.encode(bufferToNumber(input)))
-}
-
-function varintBufferDecode (input) {
-  return numberToBuffer(varint.decode(input))
-}
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":5,"varint":17}],11:[function(require,module,exports){
-'use strict'
-const baseTable = require('./base-table')
-const varintBufferEncode = require('./util').varintBufferEncode
-
-// this creates a map for codecName -> codeVarintBuffer
-
-const varintTable = {}
-module.exports = varintTable
-
-for (let encodingName in baseTable) {
-  let code = baseTable[encodingName]
-  varintTable[encodingName] = varintBufferEncode(code)
-}
-
-},{"./base-table":7,"./util":10}],12:[function(require,module,exports){
+},{"./name-table":25,"./util":26,"./varint-table":27,"buffer":5,"varint":33}],25:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"./base-table":23,"dup":8}],26:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"buffer":5,"dup":9,"varint":33}],27:[function(require,module,exports){
+arguments[4][10][0].apply(exports,arguments)
+},{"./base-table":23,"./util":26,"dup":10}],28:[function(require,module,exports){
 /* eslint quote-props: off */
 /* eslint key-spacing: off */
 'use strict'
@@ -3945,7 +5318,7 @@ exports.defaultLengths = Object.freeze({
   0xb3e0: 0x80
 })
 
-},{}],13:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 (function (Buffer){
 /**
  * Multihash implementation in JavaScript.
@@ -4174,7 +5547,7 @@ exports.prefix = function prefix (multihash) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./constants":12,"bs58":4,"buffer":5,"varint":17}],14:[function(require,module,exports){
+},{"./constants":28,"bs58":4,"buffer":5,"varint":33}],30:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -4238,7 +5611,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":5}],15:[function(require,module,exports){
+},{"buffer":5}],31:[function(require,module,exports){
 module.exports = read
 
 var MSB = 0x80
@@ -4269,7 +5642,7 @@ function read(buf, offset) {
   return res
 }
 
-},{}],16:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 module.exports = encode
 
 var MSB = 0x80
@@ -4297,14 +5670,14 @@ function encode(num, out, offset) {
   return out
 }
 
-},{}],17:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 module.exports = {
     encode: require('./encode.js')
   , decode: require('./decode.js')
   , encodingLength: require('./length.js')
 }
 
-},{"./decode.js":15,"./encode.js":16,"./length.js":18}],18:[function(require,module,exports){
+},{"./decode.js":31,"./encode.js":32,"./length.js":34}],34:[function(require,module,exports){
 
 var N1 = Math.pow(2,  7)
 var N2 = Math.pow(2, 14)
