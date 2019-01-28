@@ -1,5 +1,4 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.contentHash = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
-(function (Buffer){
 /*
 	ISC License
 
@@ -19,18 +18,9 @@
 */
 
 const CID = require('cids')
-const varint = require('varint')
 const multiC = require('multicodec')
 const multiH = require('multihashes')
-
-/**
- * Unknown Codec Error can be thrown by 'contentHash.getCodec()'
- * @param {string} message the error message
- */
-function UnknownCodec(message) { // ? Do we steel need this since 'contentHash.getCodec()' has been deprecated ?
-	this.message = message
-	this.name = 'Unknown Codec'
-}
+const package = require('./package.json')
 
 /**
  * Convert an hexadecimal string to a Buffer, the string can start with or without '0x'
@@ -47,12 +37,7 @@ function hexString(hex) {
 }
 
 module.exports = {
-
-	Types: { // TODO remove this when multicodec will be updated
-		// Codec constant defined in https://github.com/ensdomains/multicodec/blob/master/table.csv
-		ipfs	: Buffer.from('e3', 'hex'),
-		swarm	: Buffer.from('e4', 'hex'),
-	},
+	version: package.version,
 
 	/**
 	* Decode a Content Hash.
@@ -63,21 +48,19 @@ module.exports = {
 
 		let buffer = hexString(hash)
 		
-		const codec = Buffer.from(varint.decode(buffer).toString(16), 'hex')	// get decoded varint codec
-		let value = buffer.slice(varint.decode.bytes)							// remove the codec bytes
-		let cid = new CID(value)												// prepare a cid from value in case the codec is of type ipfs or swarm
+		const codec = multiC.getCodec(buffer)	// get the codec
+		let value = multiC.rmPrefix(buffer)		// get the remaining value
+		let cid = new CID(value)				// prepare a cid from value in case the codec is of type ipfs or swarm
 
 		let res = value.toString('hex')
 
-		if (codec.compare(this.Types.swarm) === 0){		// TODO remove that when multicodec will be updated
-		// if (multiC.getCodec(res) === 'swarm-ns'){	// TODO use that when multicodec will be updated
+		if (codec === 'swarm-ns'){
 			value = cid.multihash
 			res = multiH.decode(value).digest.toString('hex')
-		} else if (codec.compare(this.Types.ipfs) === 0){		// TODO remove that when multicodec will be updated
-		// } else if (multiC.getCodec(res) === 'ipfs-ns'){		// TODO use that when multicodec will be updated
+		} else if (codec === 'ipfs-ns'){
 			value = cid.multihash	
 			res = multiH.toB58String(value)
-		} else {
+		} else { // if codec is not of type ipfs/swarm just return the remaining value
 			console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + res)
 		}
 		return res
@@ -91,11 +74,7 @@ module.exports = {
 	fromIpfs: function (ipfsHash) {
 		let multihash = multiH.fromB58String(ipfsHash)	// get Multihash buffer
 		let res = new CID(1, 'dag-pb', multihash)		// create a CIDv1 with the multihash
-
-		let codec = Buffer.from(varint.encode(parseInt(this.Types.ipfs.toString('hex'), 16)))		// TODO remove that when multicodec will be updated
-		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16)))	// TODO use that when multicodec will be updated
-		res = Buffer.concat([codec, res.buffer])		// append the varint encoded codec to the CIDv1
-		
+		res = multiC.addPrefix('ipfs-ns', res.buffer)	// add ipfs codec prefix
 		return res.toString('hex')
 	},
 
@@ -108,62 +87,21 @@ module.exports = {
 		swarmHash = hexString(swarmHash)
 		let multihash = multiH.encode(swarmHash, 'keccak-256')	// get Multihash buffer
 		let res = new CID(1, 'dag-pb', multihash)				// create a CIDv1 with the multihash
-		
-		let codec = Buffer.from(varint.encode(parseInt(this.Types.swarm.toString('hex'), 16)))		// TODO remove that when multicodec will be updated
-		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16)))	// TODO use that when multicodec will be updated
-		res = Buffer.concat([codec, res.buffer])				// append the varint encoded codec to the CIDv1
-
+		res = multiC.addPrefix('swarm-ns', res.buffer)			// add swarm codec prefix
 		return res.toString('hex')
 	},
-
-	
 
 	/**
 	* Extract the codec of a content hash
 	* @param {string} hash hex string containing a content hash
 	* @return {string} the extracted codec
 	*/
-	getCodecType: function (hash) {	// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
+	getCodec: function (hash) {
 		let buffer = hexString(hash)
-		const codec = buffer.slice(0, 1)
-		return codec.toString('hex')
-	},
-
-	/**
-	 * Check if a content hash is of a certain type (defined in the Types object)
-	 * @param {string} hash hex string containing a content hash 
-	 * @param {Buffer} type a codec define in the Types object
-	 */
-	isHashOfType: function (hash, type) {	// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
-		let codec = this.getCodecType(hash)
-		let codecBuffer = hexString(codec)
-		let eq = codecBuffer.compare(type)
-		return eq === 0
-	},
-
-	// !-----------------------------------------------------------------------------------------------
-	// !										DEPRECATED
-	// !-----------------------------------------------------------------------------------------------
-	// ! All the functions below are now DEPRECATED and will be remove soon, (also they are not covered by tests anymore)
-	// TODO : delete deprecated functions in the next version
-
-	/**
-	* Generic function to encode a buffer into a content hash
-	* @param {string} codec hex string containing a content hash codec constant
-	* @param {string} buffer hex string containing the value of the content hash
-	* @return {string} the resulting content hash
-	* @deprecated this function is DEPRECATED and it will be remove soon ! Use addPrefix() from the multicodec lib.
-	*/
-	fromBuffer: function (codec, buffer) {
-		console.error('⚠️ DEPRECATED ⚠️ : \'fromBuffer(codec, buffer)\' will be remove soon, please use \'addPrefix()\' from the \'multicodec\' lib ! https://github.com/multiformats/js-multicodec')
-
-		codec = hexString(codec)
-		buffer = hexString(buffer)
-		return Buffer.concat([codec, buffer]).toString('hex')
+		return multiC.getCodec(buffer)
 	},
 }
-}).call(this,require("buffer").Buffer)
-},{"buffer":5,"cids":12,"multicodec":24,"multihashes":29,"varint":33}],2:[function(require,module,exports){
+},{"./package.json":37,"cids":12,"multicodec":25,"multihashes":31}],2:[function(require,module,exports){
 // base-x encoding / decoding
 // Copyright (c) 2018 base-x contributors
 // Copyright (c) 2014-2018 The Bitcoin Core developers (base58.cpp)
@@ -315,7 +253,7 @@ module.exports = function base (ALPHABET) {
   }
 }
 
-},{"safe-buffer":30}],3:[function(require,module,exports){
+},{"safe-buffer":32}],3:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -2767,7 +2705,7 @@ exports.addCodec = (name, code) => {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./name-table":8,"./util":9,"./varint-table":10,"buffer":5,"varint":33}],8:[function(require,module,exports){
+},{"./name-table":8,"./util":9,"./varint-table":10,"buffer":5,"varint":35}],8:[function(require,module,exports){
 'use strict'
 const baseTable = require('./base-table')
 
@@ -2814,7 +2752,7 @@ function varintBufferDecode (input) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5,"varint":33}],10:[function(require,module,exports){
+},{"buffer":5,"varint":35}],10:[function(require,module,exports){
 'use strict'
 const baseTable = require('./base-table')
 const varintBufferEncode = require('./util').varintBufferEncode
@@ -2876,7 +2814,7 @@ var CIDUtil = {
 module.exports = CIDUtil
 
 }).call(this,{"isBuffer":require("../../is-buffer/index.js")})
-},{"../../is-buffer/index.js":15,"multihashes":29}],12:[function(require,module,exports){
+},{"../../is-buffer/index.js":15,"multihashes":31}],12:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -3139,7 +3077,7 @@ _CID.codecs = codecs
 module.exports = _CID
 
 }).call(this,require("buffer").Buffer)
-},{"./cid-util":11,"buffer":5,"class-is":13,"multibase":22,"multicodec":7,"multicodec/src/base-table":6,"multihashes":29}],13:[function(require,module,exports){
+},{"./cid-util":11,"buffer":5,"class-is":13,"multibase":22,"multicodec":7,"multicodec/src/base-table":6,"multihashes":31}],13:[function(require,module,exports){
 'use strict';
 
 function withIs(Class, { className, symbolName }) {
@@ -3410,7 +3348,7 @@ module.exports = function base (ALPHABET) {
   }
 }
 
-},{"safe-buffer":30}],17:[function(require,module,exports){
+},{"safe-buffer":32}],17:[function(require,module,exports){
 'use strict'
 
 class Base {
@@ -4163,15 +4101,10 @@ exports['dns4'] = Buffer.from('36', 'hex')
 exports['dns6'] = Buffer.from('37', 'hex')
 exports['dnsaddr'] = Buffer.from('38', 'hex')
 exports['p2p-websocket-star'] = Buffer.from('01df', 'hex')
+exports['p2p-stardust'] = Buffer.from('0115', 'hex')
 exports['p2p-webrtc-star'] = Buffer.from('0113', 'hex')
 exports['p2p-webrtc-direct'] = Buffer.from('0114', 'hex')
 exports['unix'] = Buffer.from('0190', 'hex')
-
-// archiving formats
-
-// image formats
-
-// video formats
 
 // IPLD formats
 exports['dag-pb'] = Buffer.from('70', 'hex')
@@ -4197,12 +4130,452 @@ exports['decred-block'] = Buffer.from('e0', 'hex')
 exports['decred-tx'] = Buffer.from('e1', 'hex')
 exports['dash-block'] = Buffer.from('f0', 'hex')
 exports['dash-tx'] = Buffer.from('f1', 'hex')
+exports['leofcoin-block'] = Buffer.from('81', 'hex')
+exports['leofcoin-tx'] = Buffer.from('82', 'hex')
+exports['leofcoin-pr'] = Buffer.from('83', 'hex')
 exports['torrent-info'] = Buffer.from('7b', 'hex')
 exports['torrent-file'] = Buffer.from('7c', 'hex')
 exports['ed25519-pub'] = Buffer.from('ed', 'hex')
 
+// Content Namespaces
+exports['ipld-ns'] = Buffer.from('e2', 'hex')
+exports['ipfs-ns'] = Buffer.from('e3', 'hex')
+exports['swarm-ns'] = Buffer.from('e4', 'hex')
+
 }).call(this,require("buffer").Buffer)
 },{"buffer":5}],24:[function(require,module,exports){
+// THIS FILE IS GENERATED, DO NO EDIT MANUALLY
+// For more information see the README.md
+/* eslint-disable dot-notation */
+'use strict'
+module.exports = Object.freeze({
+
+  // miscellaneous,
+  RAW: 0x55,
+
+  // serialization formats,
+  CBOR: 0x51,
+  PROTOBUF: 0x50,
+  RLP: 0x60,
+  BENCODE: 0x63,
+
+  // multiformats,
+  MULTICODEC: 0x30,
+  MULTIHASH: 0x31,
+  MULTIADDR: 0x32,
+  MULTIBASE: 0x33,
+
+  // multihashes,
+  IDENTITY: 0x00,
+  MD4: 0xd4,
+  MD5: 0xd5,
+  SHA1: 0x11,
+  SHA2_256: 0x12,
+  SHA2_512: 0x13,
+  DBL_SHA2_256: 0x56,
+  SHA3_224: 0x17,
+  SHA3_256: 0x16,
+  SHA3_384: 0x15,
+  SHA3_512: 0x14,
+  SHAKE_128: 0x18,
+  SHAKE_256: 0x19,
+  KECCAK_224: 0x1a,
+  KECCAK_256: 0x1b,
+  KECCAK_384: 0x1c,
+  KECCAK_512: 0x1d,
+  MURMUR3_128: 0x22,
+  MURMUR3_32: 0x23,
+  X11: 0x1100,
+  BLAKE2B_8: 0xb201,
+  BLAKE2B_16: 0xb202,
+  BLAKE2B_24: 0xb203,
+  BLAKE2B_32: 0xb204,
+  BLAKE2B_40: 0xb205,
+  BLAKE2B_48: 0xb206,
+  BLAKE2B_56: 0xb207,
+  BLAKE2B_64: 0xb208,
+  BLAKE2B_72: 0xb209,
+  BLAKE2B_80: 0xb20a,
+  BLAKE2B_88: 0xb20b,
+  BLAKE2B_96: 0xb20c,
+  BLAKE2B_104: 0xb20d,
+  BLAKE2B_112: 0xb20e,
+  BLAKE2B_120: 0xb20f,
+  BLAKE2B_128: 0xb210,
+  BLAKE2B_136: 0xb211,
+  BLAKE2B_144: 0xb212,
+  BLAKE2B_152: 0xb213,
+  BLAKE2B_160: 0xb214,
+  BLAKE2B_168: 0xb215,
+  BLAKE2B_176: 0xb216,
+  BLAKE2B_184: 0xb217,
+  BLAKE2B_192: 0xb218,
+  BLAKE2B_200: 0xb219,
+  BLAKE2B_208: 0xb21a,
+  BLAKE2B_216: 0xb21b,
+  BLAKE2B_224: 0xb21c,
+  BLAKE2B_232: 0xb21d,
+  BLAKE2B_240: 0xb21e,
+  BLAKE2B_248: 0xb21f,
+  BLAKE2B_256: 0xb220,
+  BLAKE2B_264: 0xb221,
+  BLAKE2B_272: 0xb222,
+  BLAKE2B_280: 0xb223,
+  BLAKE2B_288: 0xb224,
+  BLAKE2B_296: 0xb225,
+  BLAKE2B_304: 0xb226,
+  BLAKE2B_312: 0xb227,
+  BLAKE2B_320: 0xb228,
+  BLAKE2B_328: 0xb229,
+  BLAKE2B_336: 0xb22a,
+  BLAKE2B_344: 0xb22b,
+  BLAKE2B_352: 0xb22c,
+  BLAKE2B_360: 0xb22d,
+  BLAKE2B_368: 0xb22e,
+  BLAKE2B_376: 0xb22f,
+  BLAKE2B_384: 0xb230,
+  BLAKE2B_392: 0xb231,
+  BLAKE2B_400: 0xb232,
+  BLAKE2B_408: 0xb233,
+  BLAKE2B_416: 0xb234,
+  BLAKE2B_424: 0xb235,
+  BLAKE2B_432: 0xb236,
+  BLAKE2B_440: 0xb237,
+  BLAKE2B_448: 0xb238,
+  BLAKE2B_456: 0xb239,
+  BLAKE2B_464: 0xb23a,
+  BLAKE2B_472: 0xb23b,
+  BLAKE2B_480: 0xb23c,
+  BLAKE2B_488: 0xb23d,
+  BLAKE2B_496: 0xb23e,
+  BLAKE2B_504: 0xb23f,
+  BLAKE2B_512: 0xb240,
+  BLAKE2S_8: 0xb241,
+  BLAKE2S_16: 0xb242,
+  BLAKE2S_24: 0xb243,
+  BLAKE2S_32: 0xb244,
+  BLAKE2S_40: 0xb245,
+  BLAKE2S_48: 0xb246,
+  BLAKE2S_56: 0xb247,
+  BLAKE2S_64: 0xb248,
+  BLAKE2S_72: 0xb249,
+  BLAKE2S_80: 0xb24a,
+  BLAKE2S_88: 0xb24b,
+  BLAKE2S_96: 0xb24c,
+  BLAKE2S_104: 0xb24d,
+  BLAKE2S_112: 0xb24e,
+  BLAKE2S_120: 0xb24f,
+  BLAKE2S_128: 0xb250,
+  BLAKE2S_136: 0xb251,
+  BLAKE2S_144: 0xb252,
+  BLAKE2S_152: 0xb253,
+  BLAKE2S_160: 0xb254,
+  BLAKE2S_168: 0xb255,
+  BLAKE2S_176: 0xb256,
+  BLAKE2S_184: 0xb257,
+  BLAKE2S_192: 0xb258,
+  BLAKE2S_200: 0xb259,
+  BLAKE2S_208: 0xb25a,
+  BLAKE2S_216: 0xb25b,
+  BLAKE2S_224: 0xb25c,
+  BLAKE2S_232: 0xb25d,
+  BLAKE2S_240: 0xb25e,
+  BLAKE2S_248: 0xb25f,
+  BLAKE2S_256: 0xb260,
+  SKEIN256_8: 0xb301,
+  SKEIN256_16: 0xb302,
+  SKEIN256_24: 0xb303,
+  SKEIN256_32: 0xb304,
+  SKEIN256_40: 0xb305,
+  SKEIN256_48: 0xb306,
+  SKEIN256_56: 0xb307,
+  SKEIN256_64: 0xb308,
+  SKEIN256_72: 0xb309,
+  SKEIN256_80: 0xb30a,
+  SKEIN256_88: 0xb30b,
+  SKEIN256_96: 0xb30c,
+  SKEIN256_104: 0xb30d,
+  SKEIN256_112: 0xb30e,
+  SKEIN256_120: 0xb30f,
+  SKEIN256_128: 0xb310,
+  SKEIN256_136: 0xb311,
+  SKEIN256_144: 0xb312,
+  SKEIN256_152: 0xb313,
+  SKEIN256_160: 0xb314,
+  SKEIN256_168: 0xb315,
+  SKEIN256_176: 0xb316,
+  SKEIN256_184: 0xb317,
+  SKEIN256_192: 0xb318,
+  SKEIN256_200: 0xb319,
+  SKEIN256_208: 0xb31a,
+  SKEIN256_216: 0xb31b,
+  SKEIN256_224: 0xb31c,
+  SKEIN256_232: 0xb31d,
+  SKEIN256_240: 0xb31e,
+  SKEIN256_248: 0xb31f,
+  SKEIN256_256: 0xb320,
+  SKEIN512_8: 0xb321,
+  SKEIN512_16: 0xb322,
+  SKEIN512_24: 0xb323,
+  SKEIN512_32: 0xb324,
+  SKEIN512_40: 0xb325,
+  SKEIN512_48: 0xb326,
+  SKEIN512_56: 0xb327,
+  SKEIN512_64: 0xb328,
+  SKEIN512_72: 0xb329,
+  SKEIN512_80: 0xb32a,
+  SKEIN512_88: 0xb32b,
+  SKEIN512_96: 0xb32c,
+  SKEIN512_104: 0xb32d,
+  SKEIN512_112: 0xb32e,
+  SKEIN512_120: 0xb32f,
+  SKEIN512_128: 0xb330,
+  SKEIN512_136: 0xb331,
+  SKEIN512_144: 0xb332,
+  SKEIN512_152: 0xb333,
+  SKEIN512_160: 0xb334,
+  SKEIN512_168: 0xb335,
+  SKEIN512_176: 0xb336,
+  SKEIN512_184: 0xb337,
+  SKEIN512_192: 0xb338,
+  SKEIN512_200: 0xb339,
+  SKEIN512_208: 0xb33a,
+  SKEIN512_216: 0xb33b,
+  SKEIN512_224: 0xb33c,
+  SKEIN512_232: 0xb33d,
+  SKEIN512_240: 0xb33e,
+  SKEIN512_248: 0xb33f,
+  SKEIN512_256: 0xb340,
+  SKEIN512_264: 0xb341,
+  SKEIN512_272: 0xb342,
+  SKEIN512_280: 0xb343,
+  SKEIN512_288: 0xb344,
+  SKEIN512_296: 0xb345,
+  SKEIN512_304: 0xb346,
+  SKEIN512_312: 0xb347,
+  SKEIN512_320: 0xb348,
+  SKEIN512_328: 0xb349,
+  SKEIN512_336: 0xb34a,
+  SKEIN512_344: 0xb34b,
+  SKEIN512_352: 0xb34c,
+  SKEIN512_360: 0xb34d,
+  SKEIN512_368: 0xb34e,
+  SKEIN512_376: 0xb34f,
+  SKEIN512_384: 0xb350,
+  SKEIN512_392: 0xb351,
+  SKEIN512_400: 0xb352,
+  SKEIN512_408: 0xb353,
+  SKEIN512_416: 0xb354,
+  SKEIN512_424: 0xb355,
+  SKEIN512_432: 0xb356,
+  SKEIN512_440: 0xb357,
+  SKEIN512_448: 0xb358,
+  SKEIN512_456: 0xb359,
+  SKEIN512_464: 0xb35a,
+  SKEIN512_472: 0xb35b,
+  SKEIN512_480: 0xb35c,
+  SKEIN512_488: 0xb35d,
+  SKEIN512_496: 0xb35e,
+  SKEIN512_504: 0xb35f,
+  SKEIN512_512: 0xb360,
+  SKEIN1024_8: 0xb361,
+  SKEIN1024_16: 0xb362,
+  SKEIN1024_24: 0xb363,
+  SKEIN1024_32: 0xb364,
+  SKEIN1024_40: 0xb365,
+  SKEIN1024_48: 0xb366,
+  SKEIN1024_56: 0xb367,
+  SKEIN1024_64: 0xb368,
+  SKEIN1024_72: 0xb369,
+  SKEIN1024_80: 0xb36a,
+  SKEIN1024_88: 0xb36b,
+  SKEIN1024_96: 0xb36c,
+  SKEIN1024_104: 0xb36d,
+  SKEIN1024_112: 0xb36e,
+  SKEIN1024_120: 0xb36f,
+  SKEIN1024_128: 0xb370,
+  SKEIN1024_136: 0xb371,
+  SKEIN1024_144: 0xb372,
+  SKEIN1024_152: 0xb373,
+  SKEIN1024_160: 0xb374,
+  SKEIN1024_168: 0xb375,
+  SKEIN1024_176: 0xb376,
+  SKEIN1024_184: 0xb377,
+  SKEIN1024_192: 0xb378,
+  SKEIN1024_200: 0xb379,
+  SKEIN1024_208: 0xb37a,
+  SKEIN1024_216: 0xb37b,
+  SKEIN1024_224: 0xb37c,
+  SKEIN1024_232: 0xb37d,
+  SKEIN1024_240: 0xb37e,
+  SKEIN1024_248: 0xb37f,
+  SKEIN1024_256: 0xb380,
+  SKEIN1024_264: 0xb381,
+  SKEIN1024_272: 0xb382,
+  SKEIN1024_280: 0xb383,
+  SKEIN1024_288: 0xb384,
+  SKEIN1024_296: 0xb385,
+  SKEIN1024_304: 0xb386,
+  SKEIN1024_312: 0xb387,
+  SKEIN1024_320: 0xb388,
+  SKEIN1024_328: 0xb389,
+  SKEIN1024_336: 0xb38a,
+  SKEIN1024_344: 0xb38b,
+  SKEIN1024_352: 0xb38c,
+  SKEIN1024_360: 0xb38d,
+  SKEIN1024_368: 0xb38e,
+  SKEIN1024_376: 0xb38f,
+  SKEIN1024_384: 0xb390,
+  SKEIN1024_392: 0xb391,
+  SKEIN1024_400: 0xb392,
+  SKEIN1024_408: 0xb393,
+  SKEIN1024_416: 0xb394,
+  SKEIN1024_424: 0xb395,
+  SKEIN1024_432: 0xb396,
+  SKEIN1024_440: 0xb397,
+  SKEIN1024_448: 0xb398,
+  SKEIN1024_456: 0xb399,
+  SKEIN1024_464: 0xb39a,
+  SKEIN1024_472: 0xb39b,
+  SKEIN1024_480: 0xb39c,
+  SKEIN1024_488: 0xb39d,
+  SKEIN1024_496: 0xb39e,
+  SKEIN1024_504: 0xb39f,
+  SKEIN1024_512: 0xb3a0,
+  SKEIN1024_520: 0xb3a1,
+  SKEIN1024_528: 0xb3a2,
+  SKEIN1024_536: 0xb3a3,
+  SKEIN1024_544: 0xb3a4,
+  SKEIN1024_552: 0xb3a5,
+  SKEIN1024_560: 0xb3a6,
+  SKEIN1024_568: 0xb3a7,
+  SKEIN1024_576: 0xb3a8,
+  SKEIN1024_584: 0xb3a9,
+  SKEIN1024_592: 0xb3aa,
+  SKEIN1024_600: 0xb3ab,
+  SKEIN1024_608: 0xb3ac,
+  SKEIN1024_616: 0xb3ad,
+  SKEIN1024_624: 0xb3ae,
+  SKEIN1024_632: 0xb3af,
+  SKEIN1024_640: 0xb3b0,
+  SKEIN1024_648: 0xb3b1,
+  SKEIN1024_656: 0xb3b2,
+  SKEIN1024_664: 0xb3b3,
+  SKEIN1024_672: 0xb3b4,
+  SKEIN1024_680: 0xb3b5,
+  SKEIN1024_688: 0xb3b6,
+  SKEIN1024_696: 0xb3b7,
+  SKEIN1024_704: 0xb3b8,
+  SKEIN1024_712: 0xb3b9,
+  SKEIN1024_720: 0xb3ba,
+  SKEIN1024_728: 0xb3bb,
+  SKEIN1024_736: 0xb3bc,
+  SKEIN1024_744: 0xb3bd,
+  SKEIN1024_752: 0xb3be,
+  SKEIN1024_760: 0xb3bf,
+  SKEIN1024_768: 0xb3c0,
+  SKEIN1024_776: 0xb3c1,
+  SKEIN1024_784: 0xb3c2,
+  SKEIN1024_792: 0xb3c3,
+  SKEIN1024_800: 0xb3c4,
+  SKEIN1024_808: 0xb3c5,
+  SKEIN1024_816: 0xb3c6,
+  SKEIN1024_824: 0xb3c7,
+  SKEIN1024_832: 0xb3c8,
+  SKEIN1024_840: 0xb3c9,
+  SKEIN1024_848: 0xb3ca,
+  SKEIN1024_856: 0xb3cb,
+  SKEIN1024_864: 0xb3cc,
+  SKEIN1024_872: 0xb3cd,
+  SKEIN1024_880: 0xb3ce,
+  SKEIN1024_888: 0xb3cf,
+  SKEIN1024_896: 0xb3d0,
+  SKEIN1024_904: 0xb3d1,
+  SKEIN1024_912: 0xb3d2,
+  SKEIN1024_920: 0xb3d3,
+  SKEIN1024_928: 0xb3d4,
+  SKEIN1024_936: 0xb3d5,
+  SKEIN1024_944: 0xb3d6,
+  SKEIN1024_952: 0xb3d7,
+  SKEIN1024_960: 0xb3d8,
+  SKEIN1024_968: 0xb3d9,
+  SKEIN1024_976: 0xb3da,
+  SKEIN1024_984: 0xb3db,
+  SKEIN1024_992: 0xb3dc,
+  SKEIN1024_1000: 0xb3dd,
+  SKEIN1024_1008: 0xb3de,
+  SKEIN1024_1016: 0xb3df,
+  SKEIN1024_1024: 0xb3e0,
+
+  // multiaddrs,
+  IP4: 0x04,
+  IP6: 0x29,
+  IP6ZONE: 0x2a,
+  TCP: 0x06,
+  UDP: 0x0111,
+  DCCP: 0x21,
+  SCTP: 0x84,
+  UDT: 0x012d,
+  UTP: 0x012e,
+  P2P: 0x01a5,
+  IPFS: 0x01a5,
+  HTTP: 0x01e0,
+  HTTPS: 0x01bb,
+  QUIC: 0x01cc,
+  WS: 0x01dd,
+  WSS: 0x01de,
+  ONION: 0x01bc,
+  ONION3: 0x01bd,
+  GARLIC64: 0x01be,
+  P2P_CIRCUIT: 0x0122,
+  DNS: 0x35,
+  DNS4: 0x36,
+  DNS6: 0x37,
+  DNSADDR: 0x38,
+  P2P_WEBSOCKET_STAR: 0x01df,
+  P2P_STARDUST: 0x0115,
+  P2P_WEBRTC_STAR: 0x0113,
+  P2P_WEBRTC_DIRECT: 0x0114,
+  UNIX: 0x0190,
+
+  // IPLD formats,
+  DAG_PB: 0x70,
+  DAG_CBOR: 0x71,
+  DAG_JSON: 0x0129,
+  GIT_RAW: 0x78,
+  ETH_BLOCK: 0x90,
+  ETH_BLOCK_LIST: 0x91,
+  ETH_TX_TRIE: 0x92,
+  ETH_TX: 0x93,
+  ETH_TX_RECEIPT_TRIE: 0x94,
+  ETH_TX_RECEIPT: 0x95,
+  ETH_STATE_TRIE: 0x96,
+  ETH_ACCOUNT_SNAPSHOT: 0x97,
+  ETH_STORAGE_TRIE: 0x98,
+  BITCOIN_BLOCK: 0xb0,
+  BITCOIN_TX: 0xb1,
+  ZCASH_BLOCK: 0xc0,
+  ZCASH_TX: 0xc1,
+  STELLAR_BLOCK: 0xd0,
+  STELLAR_TX: 0xd1,
+  DECRED_BLOCK: 0xe0,
+  DECRED_TX: 0xe1,
+  DASH_BLOCK: 0xf0,
+  DASH_TX: 0xf1,
+  LEOFCOIN_BLOCK: 0x81,
+  LEOFCOIN_TX: 0x82,
+  LEOFCOIN_PR: 0x83,
+  TORRENT_INFO: 0x7b,
+  TORRENT_FILE: 0x7c,
+  ED25519_PUB: 0xed,
+
+  // Content Namespaces,
+  IPLD_NS: 0xe2,
+  IPFS_NS: 0xe3,
+  SWARM_NS: 0xe4
+})
+
+},{}],25:[function(require,module,exports){
 (function (Buffer){
 /**
  * Implementation of the multicodec specification.
@@ -4272,6 +4645,15 @@ exports.getCodec = (prefixedData) => {
 }
 
 /**
+ * Get the code of the prefixed data.
+ * @param {Buffer} prefixedData
+ * @returns {number}
+ */
+exports.getCode = (prefixedData) => {
+  return varint.decode(prefixedData)
+}
+
+/**
  * Get the code as varint of a codec name.
  * @param {string} codecName
  * @returns {Buffer}
@@ -4284,14 +4666,461 @@ exports.getCodeVarint = (codecName) => {
   return code
 }
 
+/**
+ * Get the varint of a code.
+ * @param {Number} code
+ * @returns {Array.<number>}
+ */
+exports.getVarint = (code) => {
+  return varint.encode(code)
+}
+
+// Make the constants top-level constants
+const constants = require('./constants')
+Object.assign(exports, constants)
+
+// Human friendly names for printing, e.g. in error messages
+exports.print = require('./print')
+
 }).call(this,require("buffer").Buffer)
-},{"./name-table":25,"./util":26,"./varint-table":27,"buffer":5,"varint":33}],25:[function(require,module,exports){
+},{"./constants":24,"./name-table":26,"./print":27,"./util":28,"./varint-table":29,"buffer":5,"varint":35}],26:[function(require,module,exports){
 arguments[4][8][0].apply(exports,arguments)
-},{"./base-table":23,"dup":8}],26:[function(require,module,exports){
+},{"./base-table":23,"dup":8}],27:[function(require,module,exports){
+// THIS FILE IS GENERATED, DO NO EDIT MANUALLY
+// For more information see the README.md
+/* eslint-disable dot-notation */
+'use strict'
+module.exports = Object.freeze({
+
+  // miscellaneous,
+  0x55: 'raw',
+
+  // serialization formats,
+  0x51: 'cbor',
+  0x50: 'protobuf',
+  0x60: 'rlp',
+  0x63: 'bencode',
+
+  // multiformats,
+  0x30: 'multicodec',
+  0x31: 'multihash',
+  0x32: 'multiaddr',
+  0x33: 'multibase',
+
+  // multihashes,
+  0x00: 'identity',
+  0xd4: 'md4',
+  0xd5: 'md5',
+  0x11: 'sha1',
+  0x12: 'sha2-256',
+  0x13: 'sha2-512',
+  0x56: 'dbl-sha2-256',
+  0x17: 'sha3-224',
+  0x16: 'sha3-256',
+  0x15: 'sha3-384',
+  0x14: 'sha3-512',
+  0x18: 'shake-128',
+  0x19: 'shake-256',
+  0x1a: 'keccak-224',
+  0x1b: 'keccak-256',
+  0x1c: 'keccak-384',
+  0x1d: 'keccak-512',
+  0x22: 'murmur3-128',
+  0x23: 'murmur3-32',
+  0x1100: 'x11',
+  0xb201: 'blake2b-8',
+  0xb202: 'blake2b-16',
+  0xb203: 'blake2b-24',
+  0xb204: 'blake2b-32',
+  0xb205: 'blake2b-40',
+  0xb206: 'blake2b-48',
+  0xb207: 'blake2b-56',
+  0xb208: 'blake2b-64',
+  0xb209: 'blake2b-72',
+  0xb20a: 'blake2b-80',
+  0xb20b: 'blake2b-88',
+  0xb20c: 'blake2b-96',
+  0xb20d: 'blake2b-104',
+  0xb20e: 'blake2b-112',
+  0xb20f: 'blake2b-120',
+  0xb210: 'blake2b-128',
+  0xb211: 'blake2b-136',
+  0xb212: 'blake2b-144',
+  0xb213: 'blake2b-152',
+  0xb214: 'blake2b-160',
+  0xb215: 'blake2b-168',
+  0xb216: 'blake2b-176',
+  0xb217: 'blake2b-184',
+  0xb218: 'blake2b-192',
+  0xb219: 'blake2b-200',
+  0xb21a: 'blake2b-208',
+  0xb21b: 'blake2b-216',
+  0xb21c: 'blake2b-224',
+  0xb21d: 'blake2b-232',
+  0xb21e: 'blake2b-240',
+  0xb21f: 'blake2b-248',
+  0xb220: 'blake2b-256',
+  0xb221: 'blake2b-264',
+  0xb222: 'blake2b-272',
+  0xb223: 'blake2b-280',
+  0xb224: 'blake2b-288',
+  0xb225: 'blake2b-296',
+  0xb226: 'blake2b-304',
+  0xb227: 'blake2b-312',
+  0xb228: 'blake2b-320',
+  0xb229: 'blake2b-328',
+  0xb22a: 'blake2b-336',
+  0xb22b: 'blake2b-344',
+  0xb22c: 'blake2b-352',
+  0xb22d: 'blake2b-360',
+  0xb22e: 'blake2b-368',
+  0xb22f: 'blake2b-376',
+  0xb230: 'blake2b-384',
+  0xb231: 'blake2b-392',
+  0xb232: 'blake2b-400',
+  0xb233: 'blake2b-408',
+  0xb234: 'blake2b-416',
+  0xb235: 'blake2b-424',
+  0xb236: 'blake2b-432',
+  0xb237: 'blake2b-440',
+  0xb238: 'blake2b-448',
+  0xb239: 'blake2b-456',
+  0xb23a: 'blake2b-464',
+  0xb23b: 'blake2b-472',
+  0xb23c: 'blake2b-480',
+  0xb23d: 'blake2b-488',
+  0xb23e: 'blake2b-496',
+  0xb23f: 'blake2b-504',
+  0xb240: 'blake2b-512',
+  0xb241: 'blake2s-8',
+  0xb242: 'blake2s-16',
+  0xb243: 'blake2s-24',
+  0xb244: 'blake2s-32',
+  0xb245: 'blake2s-40',
+  0xb246: 'blake2s-48',
+  0xb247: 'blake2s-56',
+  0xb248: 'blake2s-64',
+  0xb249: 'blake2s-72',
+  0xb24a: 'blake2s-80',
+  0xb24b: 'blake2s-88',
+  0xb24c: 'blake2s-96',
+  0xb24d: 'blake2s-104',
+  0xb24e: 'blake2s-112',
+  0xb24f: 'blake2s-120',
+  0xb250: 'blake2s-128',
+  0xb251: 'blake2s-136',
+  0xb252: 'blake2s-144',
+  0xb253: 'blake2s-152',
+  0xb254: 'blake2s-160',
+  0xb255: 'blake2s-168',
+  0xb256: 'blake2s-176',
+  0xb257: 'blake2s-184',
+  0xb258: 'blake2s-192',
+  0xb259: 'blake2s-200',
+  0xb25a: 'blake2s-208',
+  0xb25b: 'blake2s-216',
+  0xb25c: 'blake2s-224',
+  0xb25d: 'blake2s-232',
+  0xb25e: 'blake2s-240',
+  0xb25f: 'blake2s-248',
+  0xb260: 'blake2s-256',
+  0xb301: 'skein256-8',
+  0xb302: 'skein256-16',
+  0xb303: 'skein256-24',
+  0xb304: 'skein256-32',
+  0xb305: 'skein256-40',
+  0xb306: 'skein256-48',
+  0xb307: 'skein256-56',
+  0xb308: 'skein256-64',
+  0xb309: 'skein256-72',
+  0xb30a: 'skein256-80',
+  0xb30b: 'skein256-88',
+  0xb30c: 'skein256-96',
+  0xb30d: 'skein256-104',
+  0xb30e: 'skein256-112',
+  0xb30f: 'skein256-120',
+  0xb310: 'skein256-128',
+  0xb311: 'skein256-136',
+  0xb312: 'skein256-144',
+  0xb313: 'skein256-152',
+  0xb314: 'skein256-160',
+  0xb315: 'skein256-168',
+  0xb316: 'skein256-176',
+  0xb317: 'skein256-184',
+  0xb318: 'skein256-192',
+  0xb319: 'skein256-200',
+  0xb31a: 'skein256-208',
+  0xb31b: 'skein256-216',
+  0xb31c: 'skein256-224',
+  0xb31d: 'skein256-232',
+  0xb31e: 'skein256-240',
+  0xb31f: 'skein256-248',
+  0xb320: 'skein256-256',
+  0xb321: 'skein512-8',
+  0xb322: 'skein512-16',
+  0xb323: 'skein512-24',
+  0xb324: 'skein512-32',
+  0xb325: 'skein512-40',
+  0xb326: 'skein512-48',
+  0xb327: 'skein512-56',
+  0xb328: 'skein512-64',
+  0xb329: 'skein512-72',
+  0xb32a: 'skein512-80',
+  0xb32b: 'skein512-88',
+  0xb32c: 'skein512-96',
+  0xb32d: 'skein512-104',
+  0xb32e: 'skein512-112',
+  0xb32f: 'skein512-120',
+  0xb330: 'skein512-128',
+  0xb331: 'skein512-136',
+  0xb332: 'skein512-144',
+  0xb333: 'skein512-152',
+  0xb334: 'skein512-160',
+  0xb335: 'skein512-168',
+  0xb336: 'skein512-176',
+  0xb337: 'skein512-184',
+  0xb338: 'skein512-192',
+  0xb339: 'skein512-200',
+  0xb33a: 'skein512-208',
+  0xb33b: 'skein512-216',
+  0xb33c: 'skein512-224',
+  0xb33d: 'skein512-232',
+  0xb33e: 'skein512-240',
+  0xb33f: 'skein512-248',
+  0xb340: 'skein512-256',
+  0xb341: 'skein512-264',
+  0xb342: 'skein512-272',
+  0xb343: 'skein512-280',
+  0xb344: 'skein512-288',
+  0xb345: 'skein512-296',
+  0xb346: 'skein512-304',
+  0xb347: 'skein512-312',
+  0xb348: 'skein512-320',
+  0xb349: 'skein512-328',
+  0xb34a: 'skein512-336',
+  0xb34b: 'skein512-344',
+  0xb34c: 'skein512-352',
+  0xb34d: 'skein512-360',
+  0xb34e: 'skein512-368',
+  0xb34f: 'skein512-376',
+  0xb350: 'skein512-384',
+  0xb351: 'skein512-392',
+  0xb352: 'skein512-400',
+  0xb353: 'skein512-408',
+  0xb354: 'skein512-416',
+  0xb355: 'skein512-424',
+  0xb356: 'skein512-432',
+  0xb357: 'skein512-440',
+  0xb358: 'skein512-448',
+  0xb359: 'skein512-456',
+  0xb35a: 'skein512-464',
+  0xb35b: 'skein512-472',
+  0xb35c: 'skein512-480',
+  0xb35d: 'skein512-488',
+  0xb35e: 'skein512-496',
+  0xb35f: 'skein512-504',
+  0xb360: 'skein512-512',
+  0xb361: 'skein1024-8',
+  0xb362: 'skein1024-16',
+  0xb363: 'skein1024-24',
+  0xb364: 'skein1024-32',
+  0xb365: 'skein1024-40',
+  0xb366: 'skein1024-48',
+  0xb367: 'skein1024-56',
+  0xb368: 'skein1024-64',
+  0xb369: 'skein1024-72',
+  0xb36a: 'skein1024-80',
+  0xb36b: 'skein1024-88',
+  0xb36c: 'skein1024-96',
+  0xb36d: 'skein1024-104',
+  0xb36e: 'skein1024-112',
+  0xb36f: 'skein1024-120',
+  0xb370: 'skein1024-128',
+  0xb371: 'skein1024-136',
+  0xb372: 'skein1024-144',
+  0xb373: 'skein1024-152',
+  0xb374: 'skein1024-160',
+  0xb375: 'skein1024-168',
+  0xb376: 'skein1024-176',
+  0xb377: 'skein1024-184',
+  0xb378: 'skein1024-192',
+  0xb379: 'skein1024-200',
+  0xb37a: 'skein1024-208',
+  0xb37b: 'skein1024-216',
+  0xb37c: 'skein1024-224',
+  0xb37d: 'skein1024-232',
+  0xb37e: 'skein1024-240',
+  0xb37f: 'skein1024-248',
+  0xb380: 'skein1024-256',
+  0xb381: 'skein1024-264',
+  0xb382: 'skein1024-272',
+  0xb383: 'skein1024-280',
+  0xb384: 'skein1024-288',
+  0xb385: 'skein1024-296',
+  0xb386: 'skein1024-304',
+  0xb387: 'skein1024-312',
+  0xb388: 'skein1024-320',
+  0xb389: 'skein1024-328',
+  0xb38a: 'skein1024-336',
+  0xb38b: 'skein1024-344',
+  0xb38c: 'skein1024-352',
+  0xb38d: 'skein1024-360',
+  0xb38e: 'skein1024-368',
+  0xb38f: 'skein1024-376',
+  0xb390: 'skein1024-384',
+  0xb391: 'skein1024-392',
+  0xb392: 'skein1024-400',
+  0xb393: 'skein1024-408',
+  0xb394: 'skein1024-416',
+  0xb395: 'skein1024-424',
+  0xb396: 'skein1024-432',
+  0xb397: 'skein1024-440',
+  0xb398: 'skein1024-448',
+  0xb399: 'skein1024-456',
+  0xb39a: 'skein1024-464',
+  0xb39b: 'skein1024-472',
+  0xb39c: 'skein1024-480',
+  0xb39d: 'skein1024-488',
+  0xb39e: 'skein1024-496',
+  0xb39f: 'skein1024-504',
+  0xb3a0: 'skein1024-512',
+  0xb3a1: 'skein1024-520',
+  0xb3a2: 'skein1024-528',
+  0xb3a3: 'skein1024-536',
+  0xb3a4: 'skein1024-544',
+  0xb3a5: 'skein1024-552',
+  0xb3a6: 'skein1024-560',
+  0xb3a7: 'skein1024-568',
+  0xb3a8: 'skein1024-576',
+  0xb3a9: 'skein1024-584',
+  0xb3aa: 'skein1024-592',
+  0xb3ab: 'skein1024-600',
+  0xb3ac: 'skein1024-608',
+  0xb3ad: 'skein1024-616',
+  0xb3ae: 'skein1024-624',
+  0xb3af: 'skein1024-632',
+  0xb3b0: 'skein1024-640',
+  0xb3b1: 'skein1024-648',
+  0xb3b2: 'skein1024-656',
+  0xb3b3: 'skein1024-664',
+  0xb3b4: 'skein1024-672',
+  0xb3b5: 'skein1024-680',
+  0xb3b6: 'skein1024-688',
+  0xb3b7: 'skein1024-696',
+  0xb3b8: 'skein1024-704',
+  0xb3b9: 'skein1024-712',
+  0xb3ba: 'skein1024-720',
+  0xb3bb: 'skein1024-728',
+  0xb3bc: 'skein1024-736',
+  0xb3bd: 'skein1024-744',
+  0xb3be: 'skein1024-752',
+  0xb3bf: 'skein1024-760',
+  0xb3c0: 'skein1024-768',
+  0xb3c1: 'skein1024-776',
+  0xb3c2: 'skein1024-784',
+  0xb3c3: 'skein1024-792',
+  0xb3c4: 'skein1024-800',
+  0xb3c5: 'skein1024-808',
+  0xb3c6: 'skein1024-816',
+  0xb3c7: 'skein1024-824',
+  0xb3c8: 'skein1024-832',
+  0xb3c9: 'skein1024-840',
+  0xb3ca: 'skein1024-848',
+  0xb3cb: 'skein1024-856',
+  0xb3cc: 'skein1024-864',
+  0xb3cd: 'skein1024-872',
+  0xb3ce: 'skein1024-880',
+  0xb3cf: 'skein1024-888',
+  0xb3d0: 'skein1024-896',
+  0xb3d1: 'skein1024-904',
+  0xb3d2: 'skein1024-912',
+  0xb3d3: 'skein1024-920',
+  0xb3d4: 'skein1024-928',
+  0xb3d5: 'skein1024-936',
+  0xb3d6: 'skein1024-944',
+  0xb3d7: 'skein1024-952',
+  0xb3d8: 'skein1024-960',
+  0xb3d9: 'skein1024-968',
+  0xb3da: 'skein1024-976',
+  0xb3db: 'skein1024-984',
+  0xb3dc: 'skein1024-992',
+  0xb3dd: 'skein1024-1000',
+  0xb3de: 'skein1024-1008',
+  0xb3df: 'skein1024-1016',
+  0xb3e0: 'skein1024-1024',
+
+  // multiaddrs,
+  0x04: 'ip4',
+  0x29: 'ip6',
+  0x2a: 'ip6zone',
+  0x06: 'tcp',
+  0x0111: 'udp',
+  0x21: 'dccp',
+  0x84: 'sctp',
+  0x012d: 'udt',
+  0x012e: 'utp',
+  0x01a5: 'p2p',
+  0x01e0: 'http',
+  0x01bb: 'https',
+  0x01cc: 'quic',
+  0x01dd: 'ws',
+  0x01de: 'wss',
+  0x01bc: 'onion',
+  0x01bd: 'onion3',
+  0x01be: 'garlic64',
+  0x0122: 'p2p-circuit',
+  0x35: 'dns',
+  0x36: 'dns4',
+  0x37: 'dns6',
+  0x38: 'dnsaddr',
+  0x01df: 'p2p-websocket-star',
+  0x0115: 'p2p-stardust',
+  0x0113: 'p2p-webrtc-star',
+  0x0114: 'p2p-webrtc-direct',
+  0x0190: 'unix',
+
+  // IPLD formats,
+  0x70: 'dag-pb',
+  0x71: 'dag-cbor',
+  0x0129: 'dag-json',
+  0x78: 'git-raw',
+  0x90: 'eth-block',
+  0x91: 'eth-block-list',
+  0x92: 'eth-tx-trie',
+  0x93: 'eth-tx',
+  0x94: 'eth-tx-receipt-trie',
+  0x95: 'eth-tx-receipt',
+  0x96: 'eth-state-trie',
+  0x97: 'eth-account-snapshot',
+  0x98: 'eth-storage-trie',
+  0xb0: 'bitcoin-block',
+  0xb1: 'bitcoin-tx',
+  0xc0: 'zcash-block',
+  0xc1: 'zcash-tx',
+  0xd0: 'stellar-block',
+  0xd1: 'stellar-tx',
+  0xe0: 'decred-block',
+  0xe1: 'decred-tx',
+  0xf0: 'dash-block',
+  0xf1: 'dash-tx',
+  0x81: 'leofcoin-block',
+  0x82: 'leofcoin-tx',
+  0x83: 'leofcoin-pr',
+  0x7b: 'torrent-info',
+  0x7c: 'torrent-file',
+  0xed: 'ed25519-pub',
+
+  // Content Namespaces,
+  0xe2: 'ipld-ns',
+  0xe3: 'ipfs-ns',
+  0xe4: 'swarm-ns'
+})
+
+},{}],28:[function(require,module,exports){
 arguments[4][9][0].apply(exports,arguments)
-},{"buffer":5,"dup":9,"varint":33}],27:[function(require,module,exports){
+},{"buffer":5,"dup":9,"varint":35}],29:[function(require,module,exports){
 arguments[4][10][0].apply(exports,arguments)
-},{"./base-table":23,"./util":26,"dup":10}],28:[function(require,module,exports){
+},{"./base-table":23,"./util":28,"dup":10}],30:[function(require,module,exports){
 /* eslint quote-props: off */
 /* eslint key-spacing: off */
 'use strict'
@@ -5318,7 +6147,7 @@ exports.defaultLengths = Object.freeze({
   0xb3e0: 0x80
 })
 
-},{}],29:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 (function (Buffer){
 /**
  * Multihash implementation in JavaScript.
@@ -5547,7 +6376,7 @@ exports.prefix = function prefix (multihash) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./constants":28,"bs58":4,"buffer":5,"varint":33}],30:[function(require,module,exports){
+},{"./constants":30,"bs58":4,"buffer":5,"varint":35}],32:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -5611,7 +6440,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":5}],31:[function(require,module,exports){
+},{"buffer":5}],33:[function(require,module,exports){
 module.exports = read
 
 var MSB = 0x80
@@ -5642,7 +6471,7 @@ function read(buf, offset) {
   return res
 }
 
-},{}],32:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 module.exports = encode
 
 var MSB = 0x80
@@ -5670,14 +6499,14 @@ function encode(num, out, offset) {
   return out
 }
 
-},{}],33:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 module.exports = {
     encode: require('./encode.js')
   , decode: require('./decode.js')
   , encodingLength: require('./length.js')
 }
 
-},{"./decode.js":31,"./encode.js":32,"./length.js":34}],34:[function(require,module,exports){
+},{"./decode.js":33,"./encode.js":34,"./length.js":36}],36:[function(require,module,exports){
 
 var N1 = Math.pow(2,  7)
 var N2 = Math.pow(2, 14)
@@ -5702,6 +6531,51 @@ module.exports = function (value) {
   : value < N9 ? 9
   :              10
   )
+}
+
+},{}],37:[function(require,module,exports){
+module.exports={
+  "name": "content-hash",
+  "version": "2.3.0",
+  "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pldespaigne/content-hash"
+  },
+  "scripts": {
+    "build": "browserify index.js --s contentHash > dist/index.js",
+    "demo": "static .",
+    "deploy-demo": "echo \"surge demo https://content-hash.surge.sh\"",
+    "test": "mocha"
+  },
+  "author": "pldespaigne",
+  "license": "ISC",
+  "dependencies": {
+    "cids": "^0.5.7",
+    "multicodec": "^0.5.0",
+    "multihashes": "^0.4.14",
+    "varint": "^5.0.0"
+  },
+  "devDependencies": {
+    "browserify": "^16.2.3",
+    "chai": "^4.2.0",
+    "mocha": "^5.2.0",
+    "node-static": "^0.7.11"
+  },
+  "keywords": [
+    "ethereum",
+    "ens",
+    "eip-1577",
+    "resolver",
+    "ipfs",
+    "swarm",
+    "content-hash",
+    "content",
+    "hash",
+    "contenthash",
+    "contentHash"
+  ]
 }
 
 },{}]},{},[1])(1)

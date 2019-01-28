@@ -44,13 +44,9 @@ Import the module in order to use it :
 
 ## 📕 API
 
-> All hex string inputs can be prefixed with `0x`, but it's not mandatory
+> All hex string **inputs** can be prefixed with `0x`, but it's **not mandatory**.
 
-### contentHash.Types
-This is an object that defines the codec type constants.
-* contentHash.Types.**ipfs** : codec for IPFS content hashes = `0xe3`
-* contentHash.Types.**swarm** : codec for Swarm content hashes = `0xe4`
-> `contentHash.Types` will be deprecated soon !
+> All **outputs** are **NOT** prefixed with `0x`
 
 ### contentHash.decode( string ) -> string
 This function takes a content hash as a hex **string** and returns the decoded content as a **string**.
@@ -79,30 +75,13 @@ const contentH = contentHash.fromSwarm(swarmHash)
 // 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 ```
 
-### contentHash.getCodecType( contentHash ) -> string
+### contentHash.getCodec( contentHash ) -> string
 This function takes a content hash as a hex **string** and returns the codec as a hex **string**.
 ```javascript
 const encoded = 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 
-const codec = contentHash.getCodecType(encoded) // 'e4'
-// here codec is equal to contentHash.Types.swarm.toString('hex')
-```
-### contentHash.isHashOfType( contentHash, type ) -> boolean
-This function takes a content hash as a hex **string** and a codec as a **contentHash.Types** and returns a **boolean** depending on wether or not the content hash has the same codec as the type.
-```javascript
-const encoded = 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
-
-contentHash.isHashOfType(encoded, contentHash.Types.swarm) // true
-```
-### 🚫 contentHash.fromBuffer( codec, buffer ) -> string
-> **DEPRECATED** : will be reomved soon, use addPrefix() from the [multicodec](https://github.com/multiformats/js-multicodec) lib.
-
-This function takes a codec as a hex **string** and a value as a hex **string** and returns the encoded content hash as a hex **string**.
-```javascript
-const value = 'd1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
-
-const contentH = contentHash.fromBuffer('00', value)
-// '00d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
+const codec = contentHash.getCodecType(encoded) // 'swarm-ns'
+codec === 'ipfs-ns' // false
 ```
 
 ## 👨‍💻 Maintainer

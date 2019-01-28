@@ -25,8 +25,8 @@ window.onload = () => {
 		
 		let codec = 'unknown'
 		
-		if(contentHash.isHashOfType(contentInputElem.value, contentHash.Types.ipfs))codec = 'ipfs'
-		else if(contentHash.isHashOfType(contentInputElem.value, contentHash.Types.swarm))codec = 'swarm'
+		if(contentHash.getCodec(contentInputElem.value) === 'ipfs-ns')codec = 'ipfs'
+		else if(contentHash.getCodec(contentInputElem.value) === 'swarm-ns')codec = 'swarm'
 
 		let url = 'https://'
 		if(codec === 'ipfs') url += 'gateway.ipfs.io/ipfs/' + cth + '/'

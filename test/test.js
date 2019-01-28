@@ -28,23 +28,13 @@ describe('content-hash', () =>
 			const actual = contentHash.fromSwarm(swarm)
 			actual.should.be.equal(swarm_contentHash)
 		})
-		it('should get a codec type from a content hash (NEW)', () => { // TODO : deprecated in the next version 
+		it('should get a codec from a content hash', () => {
 			
-			const actual_0 = contentHash.getCodecType(ipfs_contentHash)
-			const actual_1 = contentHash.getCodecType(swarm_contentHash)
+			const actual_0 = contentHash.getCodec(ipfs_contentHash)
+			const actual_1 = contentHash.getCodec(swarm_contentHash)
 
-			actual_0.should.be.equal(contentHash.Types.ipfs.toString('hex'))
-			actual_1.should.be.equal(contentHash.Types.swarm.toString('hex'))
-		})
-		it('should check if a hash is of a certain type', () => { // TODO : deprecated in the next version 
-			const value_0 = 'ffd1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
-
-			expect(contentHash.isHashOfType(ipfs_contentHash, contentHash.Types.ipfs)).to.be.true
-			expect(contentHash.isHashOfType(ipfs_contentHash, contentHash.Types.swarm)).to.be.false
-			expect(contentHash.isHashOfType(swarm_contentHash, contentHash.Types.ipfs)).to.be.false
-			expect(contentHash.isHashOfType(swarm_contentHash, contentHash.Types.swarm)).to.be.true
-			expect(contentHash.isHashOfType(value_0, contentHash.Types.ipfs)).to.be.false
-			expect(contentHash.isHashOfType(value_0, contentHash.Types.swarm)).to.be.false
+			actual_0.should.be.equal('ipfs-ns')
+			actual_1.should.be.equal('swarm-ns')
 		})
 	}
 )

@@ -17,18 +17,9 @@
 */
 
 const CID = require('cids')
-const varint = require('varint')
 const multiC = require('multicodec')
 const multiH = require('multihashes')
-
-/**
- * Unknown Codec Error can be thrown by 'contentHash.getCodec()'
- * @param {string} message the error message
- */
-function UnknownCodec(message) { // ? Do we steel need this since 'contentHash.getCodec()' has been deprecated ?
-	this.message = message
-	this.name = 'Unknown Codec'
-}
+const package = require('./package.json')
 
 /**
  * Convert an hexadecimal string to a Buffer, the string can start with or without '0x'
@@ -45,12 +36,7 @@ function hexString(hex) {
 }
 
 module.exports = {
-
-	Types: { // TODO remove this when multicodec will be updated
-		// Codec constant defined in https://github.com/ensdomains/multicodec/blob/master/table.csv
-		ipfs	: Buffer.from('e3', 'hex'),
-		swarm	: Buffer.from('e4', 'hex'),
-	},
+	version: package.version,
 
 	/**
 	* Decode a Content Hash.
@@ -61,21 +47,19 @@ module.exports = {
 
 		let buffer = hexString(hash)
 		
-		const codec = Buffer.from(varint.decode(buffer).toString(16), 'hex')	// get decoded varint codec
-		let value = buffer.slice(varint.decode.bytes)							// remove the codec bytes
-		let cid = new CID(value)												// prepare a cid from value in case the codec is of type ipfs or swarm
+		const codec = multiC.getCodec(buffer)	// get the codec
+		let value = multiC.rmPrefix(buffer)		// get the remaining value
+		let cid = new CID(value)				// prepare a cid from value in case the codec is of type ipfs or swarm
 
 		let res = value.toString('hex')
 
-		if (codec.compare(this.Types.swarm) === 0){		// TODO remove that when multicodec will be updated
-		// if (multiC.getCodec(res) === 'swarm-ns'){	// TODO use that when multicodec will be updated
+		if (codec === 'swarm-ns'){
 			value = cid.multihash
 			res = multiH.decode(value).digest.toString('hex')
-		} else if (codec.compare(this.Types.ipfs) === 0){		// TODO remove that when multicodec will be updated
-		// } else if (multiC.getCodec(res) === 'ipfs-ns'){		// TODO use that when multicodec will be updated
+		} else if (codec === 'ipfs-ns'){
 			value = cid.multihash	
 			res = multiH.toB58String(value)
-		} else {
+		} else { // if codec is not of type ipfs/swarm just return the remaining value
 			console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + res)
 		}
 		return res
@@ -89,11 +73,7 @@ module.exports = {
 	fromIpfs: function (ipfsHash) {
 		let multihash = multiH.fromB58String(ipfsHash)	// get Multihash buffer
 		let res = new CID(1, 'dag-pb', multihash)		// create a CIDv1 with the multihash
-
-		let codec = Buffer.from(varint.encode(parseInt(this.Types.ipfs.toString('hex'), 16)))		// TODO remove that when multicodec will be updated
-		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16)))	// TODO use that when multicodec will be updated
-		res = Buffer.concat([codec, res.buffer])		// append the varint encoded codec to the CIDv1
-		
+		res = multiC.addPrefix('ipfs-ns', res.buffer)	// add ipfs codec prefix
 		return res.toString('hex')
 	},
 
@@ -106,57 +86,17 @@ module.exports = {
 		swarmHash = hexString(swarmHash)
 		let multihash = multiH.encode(swarmHash, 'keccak-256')	// get Multihash buffer
 		let res = new CID(1, 'dag-pb', multihash)				// create a CIDv1 with the multihash
-		
-		let codec = Buffer.from(varint.encode(parseInt(this.Types.swarm.toString('hex'), 16)))		// TODO remove that when multicodec will be updated
-		// let codec = Buffer.from(varint.encode(parseInt(multiC.getCodeVarint('ipfs-ns'), 16)))	// TODO use that when multicodec will be updated
-		res = Buffer.concat([codec, res.buffer])				// append the varint encoded codec to the CIDv1
-
+		res = multiC.addPrefix('swarm-ns', res.buffer)			// add swarm codec prefix
 		return res.toString('hex')
 	},
-
-	
 
 	/**
 	* Extract the codec of a content hash
 	* @param {string} hash hex string containing a content hash
 	* @return {string} the extracted codec
 	*/
-	getCodecType: function (hash) {	// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
+	getCodec: function (hash) {
 		let buffer = hexString(hash)
-		const codec = buffer.slice(0, 1)
-		return codec.toString('hex')
-	},
-
-	/**
-	 * Check if a content hash is of a certain type (defined in the Types object)
-	 * @param {string} hash hex string containing a content hash 
-	 * @param {Buffer} type a codec define in the Types object
-	 */
-	isHashOfType: function (hash, type) {	// TODO deprecate this function for multicodec.getCodec(data: Buffer) when multicodec will be updated
-		let codec = this.getCodecType(hash)
-		let codecBuffer = hexString(codec)
-		let eq = codecBuffer.compare(type)
-		return eq === 0
-	},
-
-	// !-----------------------------------------------------------------------------------------------
-	// !										DEPRECATED
-	// !-----------------------------------------------------------------------------------------------
-	// ! All the functions below are now DEPRECATED and will be remove soon, (also they are not covered by tests anymore)
-	// TODO : delete deprecated functions in the next version
-
-	/**
-	* Generic function to encode a buffer into a content hash
-	* @param {string} codec hex string containing a content hash codec constant
-	* @param {string} buffer hex string containing the value of the content hash
-	* @return {string} the resulting content hash
-	* @deprecated this function is DEPRECATED and it will be remove soon ! Use addPrefix() from the multicodec lib.
-	*/
-	fromBuffer: function (codec, buffer) {
-		console.error('⚠️ DEPRECATED ⚠️ : \'fromBuffer(codec, buffer)\' will be remove soon, please use \'addPrefix()\' from the \'multicodec\' lib ! https://github.com/multiformats/js-multicodec')
-
-		codec = hexString(codec)
-		buffer = hexString(buffer)
-		return Buffer.concat([codec, buffer]).toString('hex')
+		return multiC.getCodec(buffer)
 	},
 }
