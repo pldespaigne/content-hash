@@ -85,7 +85,7 @@ module.exports = {
 	fromSwarm: function (swarmHash) {
 		swarmHash = hexString(swarmHash)
 		let multihash = multiH.encode(swarmHash, 'keccak-256')	// get Multihash buffer
-		let res = new CID(1, 'dag-pb', multihash)				// create a CIDv1 with the multihash
+		let res = new CID(1, 'swarm-manifest', multihash)				// create a CIDv1 with the multihash
 		res = multiC.addPrefix('swarm-ns', res.buffer)			// add swarm codec prefix
 		return res.toString('hex')
 	},
