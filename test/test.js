@@ -5,8 +5,8 @@ const contentHash = require('../index.js')
 
 const ipfs = 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
 const ipfs_contentHash = 'e3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
-const swarm = 'd1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
-const swarm_contentHash = 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
+const swarm = '74f5b67c088a34a7b51612671300c9f040f4b8b322fa234d26069c17eb00428a'
+const swarm_contentHash = 'e40101701b2074f5b67c088a34a7b51612671300c9f040f4b8b322fa234d26069c17eb00428a'
 
 describe('content-hash', () => 
 	{
