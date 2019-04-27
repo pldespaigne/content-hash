@@ -86,7 +86,7 @@ module.exports = {
 	fromSwarm: function (swarmHash) {
 		swarmHash = hexString(swarmHash)
 		let multihash = multiH.encode(swarmHash, 'keccak-256')	// get Multihash buffer
-		let res = new CID(1, 'dag-pb', multihash)				// create a CIDv1 with the multihash
+		let res = new CID(1, 'swarm-manifest', multihash)				// create a CIDv1 with the multihash
 		res = multiC.addPrefix('swarm-ns', res.buffer)			// add swarm codec prefix
 		return res.toString('hex')
 	},
@@ -101,7 +101,8 @@ module.exports = {
 		return multiC.getCodec(buffer)
 	},
 }
-},{"./package.json":37,"cids":12,"multicodec":25,"multihashes":31}],2:[function(require,module,exports){
+
+},{"./package.json":32,"cids":7,"multicodec":20,"multihashes":26}],2:[function(require,module,exports){
 // base-x encoding / decoding
 // Copyright (c) 2018 base-x contributors
 // Copyright (c) 2014-2018 The Bitcoin Core developers (base58.cpp)
@@ -253,7 +254,7 @@ module.exports = function base (ALPHABET) {
   }
 }
 
-},{"safe-buffer":32}],3:[function(require,module,exports){
+},{"safe-buffer":27}],3:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -2191,583 +2192,7 @@ function numberIsNaN (obj) {
   return obj !== obj // eslint-disable-line no-self-compare
 }
 
-},{"base64-js":3,"ieee754":14}],6:[function(require,module,exports){
-(function (Buffer){
-'use strict'
-
-// spec and table at: https://github.com/multiformats/multicodec
-
-exports = module.exports
-
-// Miscellaneous
-exports['raw'] = Buffer.from('55', 'hex')
-
-// bases encodings
-exports['base1'] = Buffer.from('01', 'hex')
-exports['base2'] = Buffer.from('00', 'hex')
-exports['base8'] = Buffer.from('07', 'hex')
-exports['base10'] = Buffer.from('09', 'hex')
-
-// Serialization formats
-exports['cbor'] = Buffer.from('51', 'hex')
-exports['protobuf'] = Buffer.from('50', 'hex')
-exports['rlp'] = Buffer.from('60', 'hex')
-exports['bencode'] = Buffer.from('63', 'hex')
-
-// Multiformats
-exports['multicodec'] = Buffer.from('30', 'hex')
-exports['multihash'] = Buffer.from('31', 'hex')
-exports['multiaddr'] = Buffer.from('32', 'hex')
-exports['multibase'] = Buffer.from('33', 'hex')
-exports['md4'] = Buffer.from('d4', 'hex')
-exports['md5'] = Buffer.from('d5', 'hex')
-
-// multihashes
-exports['sha1'] = Buffer.from('11', 'hex')
-exports['sha2-256'] = Buffer.from('12', 'hex')
-exports['sha2-512'] = Buffer.from('13', 'hex')
-exports['dbl-sha2-256'] = Buffer.from('56', 'hex')
-exports['sha3-224'] = Buffer.from('17', 'hex')
-exports['sha3-256'] = Buffer.from('16', 'hex')
-exports['sha3-384'] = Buffer.from('15', 'hex')
-exports['sha3-512'] = Buffer.from('14', 'hex')
-exports['shake-128'] = Buffer.from('18', 'hex')
-exports['shake-256'] = Buffer.from('19', 'hex')
-exports['keccak-224'] = Buffer.from('1a', 'hex')
-exports['keccak-256'] = Buffer.from('1b', 'hex')
-exports['keccak-384'] = Buffer.from('1c', 'hex')
-exports['keccak-512'] = Buffer.from('1d', 'hex')
-exports['murmur3'] = Buffer.from('22', 'hex')
-exports['blake2b-8'] = Buffer.from('b201', 'hex')
-exports['blake2b-16'] = Buffer.from('b202', 'hex')
-exports['blake2b-24'] = Buffer.from('b203', 'hex')
-exports['blake2b-32'] = Buffer.from('b204', 'hex')
-exports['blake2b-40'] = Buffer.from('b205', 'hex')
-exports['blake2b-48'] = Buffer.from('b206', 'hex')
-exports['blake2b-56'] = Buffer.from('b207', 'hex')
-exports['blake2b-64'] = Buffer.from('b208', 'hex')
-exports['blake2b-72'] = Buffer.from('b209', 'hex')
-exports['blake2b-80'] = Buffer.from('b20a', 'hex')
-exports['blake2b-88'] = Buffer.from('b20b', 'hex')
-exports['blake2b-96'] = Buffer.from('b20c', 'hex')
-exports['blake2b-104'] = Buffer.from('b20d', 'hex')
-exports['blake2b-112'] = Buffer.from('b20e', 'hex')
-exports['blake2b-120'] = Buffer.from('b20f', 'hex')
-exports['blake2b-128'] = Buffer.from('b210', 'hex')
-exports['blake2b-136'] = Buffer.from('b211', 'hex')
-exports['blake2b-144'] = Buffer.from('b212', 'hex')
-exports['blake2b-152'] = Buffer.from('b213', 'hex')
-exports['blake2b-160'] = Buffer.from('b214', 'hex')
-exports['blake2b-168'] = Buffer.from('b215', 'hex')
-exports['blake2b-176'] = Buffer.from('b216', 'hex')
-exports['blake2b-184'] = Buffer.from('b217', 'hex')
-exports['blake2b-192'] = Buffer.from('b218', 'hex')
-exports['blake2b-200'] = Buffer.from('b219', 'hex')
-exports['blake2b-208'] = Buffer.from('b21a', 'hex')
-exports['blake2b-216'] = Buffer.from('b21b', 'hex')
-exports['blake2b-224'] = Buffer.from('b21c', 'hex')
-exports['blake2b-232'] = Buffer.from('b21d', 'hex')
-exports['blake2b-240'] = Buffer.from('b21e', 'hex')
-exports['blake2b-248'] = Buffer.from('b21f', 'hex')
-exports['blake2b-256'] = Buffer.from('b220', 'hex')
-exports['blake2b-264'] = Buffer.from('b221', 'hex')
-exports['blake2b-272'] = Buffer.from('b222', 'hex')
-exports['blake2b-280'] = Buffer.from('b223', 'hex')
-exports['blake2b-288'] = Buffer.from('b224', 'hex')
-exports['blake2b-296'] = Buffer.from('b225', 'hex')
-exports['blake2b-304'] = Buffer.from('b226', 'hex')
-exports['blake2b-312'] = Buffer.from('b227', 'hex')
-exports['blake2b-320'] = Buffer.from('b228', 'hex')
-exports['blake2b-328'] = Buffer.from('b229', 'hex')
-exports['blake2b-336'] = Buffer.from('b22a', 'hex')
-exports['blake2b-344'] = Buffer.from('b22b', 'hex')
-exports['blake2b-352'] = Buffer.from('b22c', 'hex')
-exports['blake2b-360'] = Buffer.from('b22d', 'hex')
-exports['blake2b-368'] = Buffer.from('b22e', 'hex')
-exports['blake2b-376'] = Buffer.from('b22f', 'hex')
-exports['blake2b-384'] = Buffer.from('b230', 'hex')
-exports['blake2b-392'] = Buffer.from('b231', 'hex')
-exports['blake2b-400'] = Buffer.from('b232', 'hex')
-exports['blake2b-408'] = Buffer.from('b233', 'hex')
-exports['blake2b-416'] = Buffer.from('b234', 'hex')
-exports['blake2b-424'] = Buffer.from('b235', 'hex')
-exports['blake2b-432'] = Buffer.from('b236', 'hex')
-exports['blake2b-440'] = Buffer.from('b237', 'hex')
-exports['blake2b-448'] = Buffer.from('b238', 'hex')
-exports['blake2b-456'] = Buffer.from('b239', 'hex')
-exports['blake2b-464'] = Buffer.from('b23a', 'hex')
-exports['blake2b-472'] = Buffer.from('b23b', 'hex')
-exports['blake2b-480'] = Buffer.from('b23c', 'hex')
-exports['blake2b-488'] = Buffer.from('b23d', 'hex')
-exports['blake2b-496'] = Buffer.from('b23e', 'hex')
-exports['blake2b-504'] = Buffer.from('b23f', 'hex')
-exports['blake2b-512'] = Buffer.from('b240', 'hex')
-exports['blake2s-8'] = Buffer.from('b241', 'hex')
-exports['blake2s-16'] = Buffer.from('b242', 'hex')
-exports['blake2s-24'] = Buffer.from('b243', 'hex')
-exports['blake2s-32'] = Buffer.from('b244', 'hex')
-exports['blake2s-40'] = Buffer.from('b245', 'hex')
-exports['blake2s-48'] = Buffer.from('b246', 'hex')
-exports['blake2s-56'] = Buffer.from('b247', 'hex')
-exports['blake2s-64'] = Buffer.from('b248', 'hex')
-exports['blake2s-72'] = Buffer.from('b249', 'hex')
-exports['blake2s-80'] = Buffer.from('b24a', 'hex')
-exports['blake2s-88'] = Buffer.from('b24b', 'hex')
-exports['blake2s-96'] = Buffer.from('b24c', 'hex')
-exports['blake2s-104'] = Buffer.from('b24d', 'hex')
-exports['blake2s-112'] = Buffer.from('b24e', 'hex')
-exports['blake2s-120'] = Buffer.from('b24f', 'hex')
-exports['blake2s-128'] = Buffer.from('b250', 'hex')
-exports['blake2s-136'] = Buffer.from('b251', 'hex')
-exports['blake2s-144'] = Buffer.from('b252', 'hex')
-exports['blake2s-152'] = Buffer.from('b253', 'hex')
-exports['blake2s-160'] = Buffer.from('b254', 'hex')
-exports['blake2s-168'] = Buffer.from('b255', 'hex')
-exports['blake2s-176'] = Buffer.from('b256', 'hex')
-exports['blake2s-184'] = Buffer.from('b257', 'hex')
-exports['blake2s-192'] = Buffer.from('b258', 'hex')
-exports['blake2s-200'] = Buffer.from('b259', 'hex')
-exports['blake2s-208'] = Buffer.from('b25a', 'hex')
-exports['blake2s-216'] = Buffer.from('b25b', 'hex')
-exports['blake2s-224'] = Buffer.from('b25c', 'hex')
-exports['blake2s-232'] = Buffer.from('b25d', 'hex')
-exports['blake2s-240'] = Buffer.from('b25e', 'hex')
-exports['blake2s-248'] = Buffer.from('b25f', 'hex')
-exports['blake2s-256'] = Buffer.from('b260', 'hex')
-exports['skein256-8'] = Buffer.from('b301', 'hex')
-exports['skein256-16'] = Buffer.from('b302', 'hex')
-exports['skein256-24'] = Buffer.from('b303', 'hex')
-exports['skein256-32'] = Buffer.from('b304', 'hex')
-exports['skein256-40'] = Buffer.from('b305', 'hex')
-exports['skein256-48'] = Buffer.from('b306', 'hex')
-exports['skein256-56'] = Buffer.from('b307', 'hex')
-exports['skein256-64'] = Buffer.from('b308', 'hex')
-exports['skein256-72'] = Buffer.from('b309', 'hex')
-exports['skein256-80'] = Buffer.from('b30a', 'hex')
-exports['skein256-88'] = Buffer.from('b30b', 'hex')
-exports['skein256-96'] = Buffer.from('b30c', 'hex')
-exports['skein256-104'] = Buffer.from('b30d', 'hex')
-exports['skein256-112'] = Buffer.from('b30e', 'hex')
-exports['skein256-120'] = Buffer.from('b30f', 'hex')
-exports['skein256-128'] = Buffer.from('b310', 'hex')
-exports['skein256-136'] = Buffer.from('b311', 'hex')
-exports['skein256-144'] = Buffer.from('b312', 'hex')
-exports['skein256-152'] = Buffer.from('b313', 'hex')
-exports['skein256-160'] = Buffer.from('b314', 'hex')
-exports['skein256-168'] = Buffer.from('b315', 'hex')
-exports['skein256-176'] = Buffer.from('b316', 'hex')
-exports['skein256-184'] = Buffer.from('b317', 'hex')
-exports['skein256-192'] = Buffer.from('b318', 'hex')
-exports['skein256-200'] = Buffer.from('b319', 'hex')
-exports['skein256-208'] = Buffer.from('b31a', 'hex')
-exports['skein256-216'] = Buffer.from('b31b', 'hex')
-exports['skein256-224'] = Buffer.from('b31c', 'hex')
-exports['skein256-232'] = Buffer.from('b31d', 'hex')
-exports['skein256-240'] = Buffer.from('b31e', 'hex')
-exports['skein256-248'] = Buffer.from('b31f', 'hex')
-exports['skein256-256'] = Buffer.from('b320', 'hex')
-exports['skein512-8'] = Buffer.from('b321', 'hex')
-exports['skein512-16'] = Buffer.from('b322', 'hex')
-exports['skein512-24'] = Buffer.from('b323', 'hex')
-exports['skein512-32'] = Buffer.from('b324', 'hex')
-exports['skein512-40'] = Buffer.from('b325', 'hex')
-exports['skein512-48'] = Buffer.from('b326', 'hex')
-exports['skein512-56'] = Buffer.from('b327', 'hex')
-exports['skein512-64'] = Buffer.from('b328', 'hex')
-exports['skein512-72'] = Buffer.from('b329', 'hex')
-exports['skein512-80'] = Buffer.from('b32a', 'hex')
-exports['skein512-88'] = Buffer.from('b32b', 'hex')
-exports['skein512-96'] = Buffer.from('b32c', 'hex')
-exports['skein512-104'] = Buffer.from('b32d', 'hex')
-exports['skein512-112'] = Buffer.from('b32e', 'hex')
-exports['skein512-120'] = Buffer.from('b32f', 'hex')
-exports['skein512-128'] = Buffer.from('b330', 'hex')
-exports['skein512-136'] = Buffer.from('b331', 'hex')
-exports['skein512-144'] = Buffer.from('b332', 'hex')
-exports['skein512-152'] = Buffer.from('b333', 'hex')
-exports['skein512-160'] = Buffer.from('b334', 'hex')
-exports['skein512-168'] = Buffer.from('b335', 'hex')
-exports['skein512-176'] = Buffer.from('b336', 'hex')
-exports['skein512-184'] = Buffer.from('b337', 'hex')
-exports['skein512-192'] = Buffer.from('b338', 'hex')
-exports['skein512-200'] = Buffer.from('b339', 'hex')
-exports['skein512-208'] = Buffer.from('b33a', 'hex')
-exports['skein512-216'] = Buffer.from('b33b', 'hex')
-exports['skein512-224'] = Buffer.from('b33c', 'hex')
-exports['skein512-232'] = Buffer.from('b33d', 'hex')
-exports['skein512-240'] = Buffer.from('b33e', 'hex')
-exports['skein512-248'] = Buffer.from('b33f', 'hex')
-exports['skein512-256'] = Buffer.from('b340', 'hex')
-exports['skein512-264'] = Buffer.from('b341', 'hex')
-exports['skein512-272'] = Buffer.from('b342', 'hex')
-exports['skein512-280'] = Buffer.from('b343', 'hex')
-exports['skein512-288'] = Buffer.from('b344', 'hex')
-exports['skein512-296'] = Buffer.from('b345', 'hex')
-exports['skein512-304'] = Buffer.from('b346', 'hex')
-exports['skein512-312'] = Buffer.from('b347', 'hex')
-exports['skein512-320'] = Buffer.from('b348', 'hex')
-exports['skein512-328'] = Buffer.from('b349', 'hex')
-exports['skein512-336'] = Buffer.from('b34a', 'hex')
-exports['skein512-344'] = Buffer.from('b34b', 'hex')
-exports['skein512-352'] = Buffer.from('b34c', 'hex')
-exports['skein512-360'] = Buffer.from('b34d', 'hex')
-exports['skein512-368'] = Buffer.from('b34e', 'hex')
-exports['skein512-376'] = Buffer.from('b34f', 'hex')
-exports['skein512-384'] = Buffer.from('b350', 'hex')
-exports['skein512-392'] = Buffer.from('b351', 'hex')
-exports['skein512-400'] = Buffer.from('b352', 'hex')
-exports['skein512-408'] = Buffer.from('b353', 'hex')
-exports['skein512-416'] = Buffer.from('b354', 'hex')
-exports['skein512-424'] = Buffer.from('b355', 'hex')
-exports['skein512-432'] = Buffer.from('b356', 'hex')
-exports['skein512-440'] = Buffer.from('b357', 'hex')
-exports['skein512-448'] = Buffer.from('b358', 'hex')
-exports['skein512-456'] = Buffer.from('b359', 'hex')
-exports['skein512-464'] = Buffer.from('b35a', 'hex')
-exports['skein512-472'] = Buffer.from('b35b', 'hex')
-exports['skein512-480'] = Buffer.from('b35c', 'hex')
-exports['skein512-488'] = Buffer.from('b35d', 'hex')
-exports['skein512-496'] = Buffer.from('b35e', 'hex')
-exports['skein512-504'] = Buffer.from('b35f', 'hex')
-exports['skein512-512'] = Buffer.from('b360', 'hex')
-exports['skein1024-8'] = Buffer.from('b361', 'hex')
-exports['skein1024-16'] = Buffer.from('b362', 'hex')
-exports['skein1024-24'] = Buffer.from('b363', 'hex')
-exports['skein1024-32'] = Buffer.from('b364', 'hex')
-exports['skein1024-40'] = Buffer.from('b365', 'hex')
-exports['skein1024-48'] = Buffer.from('b366', 'hex')
-exports['skein1024-56'] = Buffer.from('b367', 'hex')
-exports['skein1024-64'] = Buffer.from('b368', 'hex')
-exports['skein1024-72'] = Buffer.from('b369', 'hex')
-exports['skein1024-80'] = Buffer.from('b36a', 'hex')
-exports['skein1024-88'] = Buffer.from('b36b', 'hex')
-exports['skein1024-96'] = Buffer.from('b36c', 'hex')
-exports['skein1024-104'] = Buffer.from('b36d', 'hex')
-exports['skein1024-112'] = Buffer.from('b36e', 'hex')
-exports['skein1024-120'] = Buffer.from('b36f', 'hex')
-exports['skein1024-128'] = Buffer.from('b370', 'hex')
-exports['skein1024-136'] = Buffer.from('b371', 'hex')
-exports['skein1024-144'] = Buffer.from('b372', 'hex')
-exports['skein1024-152'] = Buffer.from('b373', 'hex')
-exports['skein1024-160'] = Buffer.from('b374', 'hex')
-exports['skein1024-168'] = Buffer.from('b375', 'hex')
-exports['skein1024-176'] = Buffer.from('b376', 'hex')
-exports['skein1024-184'] = Buffer.from('b377', 'hex')
-exports['skein1024-192'] = Buffer.from('b378', 'hex')
-exports['skein1024-200'] = Buffer.from('b379', 'hex')
-exports['skein1024-208'] = Buffer.from('b37a', 'hex')
-exports['skein1024-216'] = Buffer.from('b37b', 'hex')
-exports['skein1024-224'] = Buffer.from('b37c', 'hex')
-exports['skein1024-232'] = Buffer.from('b37d', 'hex')
-exports['skein1024-240'] = Buffer.from('b37e', 'hex')
-exports['skein1024-248'] = Buffer.from('b37f', 'hex')
-exports['skein1024-256'] = Buffer.from('b380', 'hex')
-exports['skein1024-264'] = Buffer.from('b381', 'hex')
-exports['skein1024-272'] = Buffer.from('b382', 'hex')
-exports['skein1024-280'] = Buffer.from('b383', 'hex')
-exports['skein1024-288'] = Buffer.from('b384', 'hex')
-exports['skein1024-296'] = Buffer.from('b385', 'hex')
-exports['skein1024-304'] = Buffer.from('b386', 'hex')
-exports['skein1024-312'] = Buffer.from('b387', 'hex')
-exports['skein1024-320'] = Buffer.from('b388', 'hex')
-exports['skein1024-328'] = Buffer.from('b389', 'hex')
-exports['skein1024-336'] = Buffer.from('b38a', 'hex')
-exports['skein1024-344'] = Buffer.from('b38b', 'hex')
-exports['skein1024-352'] = Buffer.from('b38c', 'hex')
-exports['skein1024-360'] = Buffer.from('b38d', 'hex')
-exports['skein1024-368'] = Buffer.from('b38e', 'hex')
-exports['skein1024-376'] = Buffer.from('b38f', 'hex')
-exports['skein1024-384'] = Buffer.from('b390', 'hex')
-exports['skein1024-392'] = Buffer.from('b391', 'hex')
-exports['skein1024-400'] = Buffer.from('b392', 'hex')
-exports['skein1024-408'] = Buffer.from('b393', 'hex')
-exports['skein1024-416'] = Buffer.from('b394', 'hex')
-exports['skein1024-424'] = Buffer.from('b395', 'hex')
-exports['skein1024-432'] = Buffer.from('b396', 'hex')
-exports['skein1024-440'] = Buffer.from('b397', 'hex')
-exports['skein1024-448'] = Buffer.from('b398', 'hex')
-exports['skein1024-456'] = Buffer.from('b399', 'hex')
-exports['skein1024-464'] = Buffer.from('b39a', 'hex')
-exports['skein1024-472'] = Buffer.from('b39b', 'hex')
-exports['skein1024-480'] = Buffer.from('b39c', 'hex')
-exports['skein1024-488'] = Buffer.from('b39d', 'hex')
-exports['skein1024-496'] = Buffer.from('b39e', 'hex')
-exports['skein1024-504'] = Buffer.from('b39f', 'hex')
-exports['skein1024-512'] = Buffer.from('b3a0', 'hex')
-exports['skein1024-520'] = Buffer.from('b3a1', 'hex')
-exports['skein1024-528'] = Buffer.from('b3a2', 'hex')
-exports['skein1024-536'] = Buffer.from('b3a3', 'hex')
-exports['skein1024-544'] = Buffer.from('b3a4', 'hex')
-exports['skein1024-552'] = Buffer.from('b3a5', 'hex')
-exports['skein1024-560'] = Buffer.from('b3a6', 'hex')
-exports['skein1024-568'] = Buffer.from('b3a7', 'hex')
-exports['skein1024-576'] = Buffer.from('b3a8', 'hex')
-exports['skein1024-584'] = Buffer.from('b3a9', 'hex')
-exports['skein1024-592'] = Buffer.from('b3aa', 'hex')
-exports['skein1024-600'] = Buffer.from('b3ab', 'hex')
-exports['skein1024-608'] = Buffer.from('b3ac', 'hex')
-exports['skein1024-616'] = Buffer.from('b3ad', 'hex')
-exports['skein1024-624'] = Buffer.from('b3ae', 'hex')
-exports['skein1024-632'] = Buffer.from('b3af', 'hex')
-exports['skein1024-640'] = Buffer.from('b3b0', 'hex')
-exports['skein1024-648'] = Buffer.from('b3b1', 'hex')
-exports['skein1024-656'] = Buffer.from('b3b2', 'hex')
-exports['skein1024-664'] = Buffer.from('b3b3', 'hex')
-exports['skein1024-672'] = Buffer.from('b3b4', 'hex')
-exports['skein1024-680'] = Buffer.from('b3b5', 'hex')
-exports['skein1024-688'] = Buffer.from('b3b6', 'hex')
-exports['skein1024-696'] = Buffer.from('b3b7', 'hex')
-exports['skein1024-704'] = Buffer.from('b3b8', 'hex')
-exports['skein1024-712'] = Buffer.from('b3b9', 'hex')
-exports['skein1024-720'] = Buffer.from('b3ba', 'hex')
-exports['skein1024-728'] = Buffer.from('b3bb', 'hex')
-exports['skein1024-736'] = Buffer.from('b3bc', 'hex')
-exports['skein1024-744'] = Buffer.from('b3bd', 'hex')
-exports['skein1024-752'] = Buffer.from('b3be', 'hex')
-exports['skein1024-760'] = Buffer.from('b3bf', 'hex')
-exports['skein1024-768'] = Buffer.from('b3c0', 'hex')
-exports['skein1024-776'] = Buffer.from('b3c1', 'hex')
-exports['skein1024-784'] = Buffer.from('b3c2', 'hex')
-exports['skein1024-792'] = Buffer.from('b3c3', 'hex')
-exports['skein1024-800'] = Buffer.from('b3c4', 'hex')
-exports['skein1024-808'] = Buffer.from('b3c5', 'hex')
-exports['skein1024-816'] = Buffer.from('b3c6', 'hex')
-exports['skein1024-824'] = Buffer.from('b3c7', 'hex')
-exports['skein1024-832'] = Buffer.from('b3c8', 'hex')
-exports['skein1024-840'] = Buffer.from('b3c9', 'hex')
-exports['skein1024-848'] = Buffer.from('b3ca', 'hex')
-exports['skein1024-856'] = Buffer.from('b3cb', 'hex')
-exports['skein1024-864'] = Buffer.from('b3cc', 'hex')
-exports['skein1024-872'] = Buffer.from('b3cd', 'hex')
-exports['skein1024-880'] = Buffer.from('b3ce', 'hex')
-exports['skein1024-888'] = Buffer.from('b3cf', 'hex')
-exports['skein1024-896'] = Buffer.from('b3d0', 'hex')
-exports['skein1024-904'] = Buffer.from('b3d1', 'hex')
-exports['skein1024-912'] = Buffer.from('b3d2', 'hex')
-exports['skein1024-920'] = Buffer.from('b3d3', 'hex')
-exports['skein1024-928'] = Buffer.from('b3d4', 'hex')
-exports['skein1024-936'] = Buffer.from('b3d5', 'hex')
-exports['skein1024-944'] = Buffer.from('b3d6', 'hex')
-exports['skein1024-952'] = Buffer.from('b3d7', 'hex')
-exports['skein1024-960'] = Buffer.from('b3d8', 'hex')
-exports['skein1024-968'] = Buffer.from('b3d9', 'hex')
-exports['skein1024-976'] = Buffer.from('b3da', 'hex')
-exports['skein1024-984'] = Buffer.from('b3db', 'hex')
-exports['skein1024-992'] = Buffer.from('b3dc', 'hex')
-exports['skein1024-1000'] = Buffer.from('b3dd', 'hex')
-exports['skein1024-1008'] = Buffer.from('b3de', 'hex')
-exports['skein1024-1016'] = Buffer.from('b3df', 'hex')
-exports['skein1024-1024'] = Buffer.from('b3e0', 'hex')
-
-// multiaddrs
-exports['ip4'] = Buffer.from('04', 'hex')
-exports['ip6'] = Buffer.from('29', 'hex')
-exports['tcp'] = Buffer.from('06', 'hex')
-exports['udp'] = Buffer.from('0111', 'hex')
-exports['dccp'] = Buffer.from('21', 'hex')
-exports['sctp'] = Buffer.from('84', 'hex')
-exports['udt'] = Buffer.from('012d', 'hex')
-exports['utp'] = Buffer.from('012e', 'hex')
-exports['ipfs'] = Buffer.from('01a5', 'hex')
-exports['http'] = Buffer.from('01e0', 'hex')
-exports['https'] = Buffer.from('01bb', 'hex')
-exports['quic'] = Buffer.from('01cc', 'hex')
-exports['ws'] = Buffer.from('01dd', 'hex')
-exports['onion'] = Buffer.from('01bc', 'hex')
-exports['p2p-circuit'] = Buffer.from('0122', 'hex')
-
-// archiving formats
-
-// image formats
-
-// video formats
-
-// VCS formats
-exports['git-raw'] = Buffer.from('78', 'hex')
-
-// IPLD formats
-exports['dag-pb'] = Buffer.from('70', 'hex')
-exports['dag-cbor'] = Buffer.from('71', 'hex')
-exports['git-raw'] = Buffer.from('78', 'hex')
-exports['eth-block'] = Buffer.from('90', 'hex')
-exports['eth-block-list'] = Buffer.from('91', 'hex')
-exports['eth-tx-trie'] = Buffer.from('92', 'hex')
-exports['eth-tx'] = Buffer.from('93', 'hex')
-exports['eth-tx-receipt-trie'] = Buffer.from('94', 'hex')
-exports['eth-tx-receipt'] = Buffer.from('95', 'hex')
-exports['eth-state-trie'] = Buffer.from('96', 'hex')
-exports['eth-account-snapshot'] = Buffer.from('97', 'hex')
-exports['eth-storage-trie'] = Buffer.from('98', 'hex')
-
-exports['bitcoin-block'] = Buffer.from('b0', 'hex')
-exports['bitcoin-tx'] = Buffer.from('b1', 'hex')
-exports['zcash-block'] = Buffer.from('c0', 'hex')
-exports['zcash-tx'] = Buffer.from('c1', 'hex')
-exports['stellar-block'] = Buffer.from('d0', 'hex')
-exports['stellar-tx'] = Buffer.from('d1', 'hex')
-
-exports['torrent-info'] = Buffer.from('7b', 'hex')
-exports['torrent-file'] = Buffer.from('7c', 'hex')
-exports['ed25519-pub'] = Buffer.from('ed', 'hex')
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":5}],7:[function(require,module,exports){
-(function (Buffer){
-/**
- * Implementation of the multicodec specification.
- *
- * @module multicodec
- * @example
- * const multicodec = require('multicodec')
- *
- * const prefixedProtobuf = multicodec.addPrefix('protobuf', protobufBuffer)
- * // prefixedProtobuf 0x50...
- *
- */
-'use strict'
-
-const varint = require('varint')
-const codecNameToCodeVarint = require('./varint-table')
-const codeToCodecName = require('./name-table')
-const util = require('./util')
-
-exports = module.exports
-
-/**
- * Prefix a buffer with a multicodec-packed.
- *
- * @param {string|number} multicodecStrOrCode
- * @param {Buffer} data
- * @returns {Buffer}
- */
-exports.addPrefix = (multicodecStrOrCode, data) => {
-  let prefix
-
-  if (Buffer.isBuffer(multicodecStrOrCode)) {
-    prefix = util.varintBufferEncode(multicodecStrOrCode)
-  } else {
-    if (codecNameToCodeVarint[multicodecStrOrCode]) {
-      prefix = codecNameToCodeVarint[multicodecStrOrCode]
-    } else {
-      throw new Error('multicodec not recognized')
-    }
-  }
-  return Buffer.concat([prefix, data])
-}
-
-/**
- * Decapsulate the multicodec-packed prefix from the data.
- *
- * @param {Buffer} data
- * @returns {Buffer}
- */
-exports.rmPrefix = (data) => {
-  varint.decode(data)
-  return data.slice(varint.decode.bytes)
-}
-
-/**
- * Get the codec of the prefixed data.
- * @param {Buffer} prefixedData
- * @returns {string}
- */
-exports.getCodec = (prefixedData) => {
-  const code = util.varintBufferDecode(prefixedData)
-  const codecName = codeToCodecName[code.toString('hex')]
-  if (codecName === undefined) {
-    throw new Error('Code `0x' + code.toString('hex') + '` not found')
-  }
-  return codecName
-}
-
-/**
- * Get the code as varint of a codec name.
- * @param {string} codecName
- * @returns {Buffer}
- */
-exports.getCodeVarint = (codecName) => {
-  const code = codecNameToCodeVarint[codecName]
-  if (code === undefined) {
-    throw new Error('Codec `' + codecName + '` not found')
-  }
-  return code
-}
-
-/**
- * Add a new codec
- * @param {string} name Name of the codec
- * @param {Buffer} code The code of the codec
- * @returns {void}
- */
-exports.addCodec = (name, code) => {
-  codecNameToCodeVarint[name] = util.varintBufferEncode(code)
-  codeToCodecName[code.toString('hex')] = name
-}
-
-}).call(this,require("buffer").Buffer)
-},{"./name-table":8,"./util":9,"./varint-table":10,"buffer":5,"varint":35}],8:[function(require,module,exports){
-'use strict'
-const baseTable = require('./base-table')
-
-// this creates a map for code as hexString -> codecName
-
-const nameTable = {}
-module.exports = nameTable
-
-for (let encodingName in baseTable) {
-  let code = baseTable[encodingName]
-  nameTable[code.toString('hex')] = encodingName
-}
-
-},{"./base-table":6}],9:[function(require,module,exports){
-(function (Buffer){
-'use strict'
-const varint = require('varint')
-
-module.exports = {
-  numberToBuffer,
-  bufferToNumber,
-  varintBufferEncode,
-  varintBufferDecode
-}
-
-function bufferToNumber (buf) {
-  return parseInt(buf.toString('hex'), 16)
-}
-
-function numberToBuffer (num) {
-  let hexString = num.toString(16)
-  if (hexString.length % 2 === 1) {
-    hexString = '0' + hexString
-  }
-  return Buffer.from(hexString, 'hex')
-}
-
-function varintBufferEncode (input) {
-  return Buffer.from(varint.encode(bufferToNumber(input)))
-}
-
-function varintBufferDecode (input) {
-  return numberToBuffer(varint.decode(input))
-}
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":5,"varint":35}],10:[function(require,module,exports){
-'use strict'
-const baseTable = require('./base-table')
-const varintBufferEncode = require('./util').varintBufferEncode
-
-// this creates a map for codecName -> codeVarintBuffer
-
-const varintTable = {}
-module.exports = varintTable
-
-for (let encodingName in baseTable) {
-  let code = baseTable[encodingName]
-  varintTable[encodingName] = varintBufferEncode(code)
-}
-
-},{"./base-table":6,"./util":9}],11:[function(require,module,exports){
+},{"base64-js":3,"ieee754":9}],6:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -2795,6 +2220,15 @@ var CIDUtil = {
       return 'codec must be string'
     }
 
+    if (other.version === 0) {
+      if (other.codec !== 'dag-pb') {
+        return `codec must be 'dag-pb' for CIDv0`
+      }
+      if (other.multibaseName !== 'base58btc') {
+        return `multibaseName must be 'base58btc' for CIDv0`
+      }
+    }
+
     if (!Buffer.isBuffer(other.multihash)) {
       return 'multihash must be a Buffer'
     }
@@ -2814,7 +2248,7 @@ var CIDUtil = {
 module.exports = CIDUtil
 
 }).call(this,{"isBuffer":require("../../is-buffer/index.js")})
-},{"../../is-buffer/index.js":15,"multihashes":31}],12:[function(require,module,exports){
+},{"../../is-buffer/index.js":10,"multihashes":26}],7:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -2830,7 +2264,6 @@ const withIs = require('class-is')
  * @param {string} codec
  * @param {number} version
  * @param {Buffer} multihash
- *
  */
 
 /**
@@ -2853,70 +2286,86 @@ class CID {
    *
    * The algorithm for argument input is roughly:
    * ```
-   * if (str)
+   * if (cid)
+   *   -> create a copy
+   * else if (str)
    *   if (1st char is on multibase table) -> CID String
    *   else -> bs58 encoded multihash
    * else if (Buffer)
-   *   if (0 or 1) -> CID
+   *   if (1st byte is 0 or 1) -> CID
    *   else -> multihash
    * else if (Number)
    *   -> construct CID by parts
-   *
-   * ..if only JS had traits..
    * ```
    *
    * @param {string|Buffer} version
    * @param {string} [codec]
    * @param {Buffer} [multihash]
+   * @param {string} [multibaseName]
    *
    * @example
-   *
-   * new CID(<version>, <codec>, <multihash>)
+   * new CID(<version>, <codec>, <multihash>, <multibaseName>)
    * new CID(<cidStr>)
    * new CID(<cid.buffer>)
    * new CID(<multihash>)
    * new CID(<bs58 encoded multihash>)
    * new CID(<cid>)
-   *
    */
-  constructor (version, codec, multihash) {
+  constructor (version, codec, multihash, multibaseName = 'base58btc') {
     if (module.exports.isCID(version)) {
-      let cid = version
+      // version is an exising CID instance
+      const cid = version
       this.version = cid.version
       this.codec = cid.codec
       this.multihash = Buffer.from(cid.multihash)
+      this.multibaseName = cid.multibaseName
       return
     }
+
     if (typeof version === 'string') {
-      if (multibase.isEncoded(version)) { // CID String (encoded with multibase)
+      // e.g. 'base32' or false
+      const baseName = multibase.isEncoded(version)
+      if (baseName) {
+        // version is a CID String encoded with multibase, so v1
         const cid = multibase.decode(version)
-        version = parseInt(cid.slice(0, 1).toString('hex'), 16)
-        codec = multicodec.getCodec(cid.slice(1))
-        multihash = multicodec.rmPrefix(cid.slice(1))
-      } else { // bs58 string encoded multihash
-        codec = 'dag-pb'
-        multihash = mh.fromB58String(version)
-        version = 0
+        this.version = parseInt(cid.slice(0, 1).toString('hex'), 16)
+        this.codec = multicodec.getCodec(cid.slice(1))
+        this.multihash = multicodec.rmPrefix(cid.slice(1))
+        this.multibaseName = baseName
+      } else {
+        // version is a base58btc string multihash, so v0
+        this.version = 0
+        this.codec = 'dag-pb'
+        this.multihash = mh.fromB58String(version)
+        this.multibaseName = 'base58btc'
       }
-    } else if (Buffer.isBuffer(version)) {
-      const firstByte = version.slice(0, 1)
-      const v = parseInt(firstByte.toString('hex'), 16)
-      if (v === 0 || v === 1) { // CID
-        const cid = version
-        version = v
-        codec = multicodec.getCodec(cid.slice(1))
-        multihash = multicodec.rmPrefix(cid.slice(1))
-      } else { // multihash
-        codec = 'dag-pb'
-        multihash = version
-        version = 0
-      }
+      CID.validateCID(this)
+      Object.defineProperty(this, 'string', { value: version })
+      return
     }
 
-    /**
-     * @type {string}
-     */
-    this.codec = codec
+    if (Buffer.isBuffer(version)) {
+      const firstByte = version.slice(0, 1)
+      const v = parseInt(firstByte.toString('hex'), 16)
+      if (v === 0 || v === 1) {
+        // version is a CID buffer
+        const cid = version
+        this.version = v
+        this.codec = multicodec.getCodec(cid.slice(1))
+        this.multihash = multicodec.rmPrefix(cid.slice(1))
+        this.multibaseName = (v === 0) ? 'base58btc' : multibaseName
+      } else {
+        // version is a raw multihash buffer, so v0
+        this.version = 0
+        this.codec = 'dag-pb'
+        this.multihash = version
+        this.multibaseName = 'base58btc'
+      }
+      CID.validateCID(this)
+      return
+    }
+
+    // otherwise, assemble the CID from the parameters
 
     /**
      * @type {number}
@@ -2924,9 +2373,19 @@ class CID {
     this.version = version
 
     /**
+     * @type {string}
+     */
+    this.codec = codec
+
+    /**
      * @type {Buffer}
      */
     this.multihash = multihash
+
+    /**
+     * @type {string}
+     */
+    this.multibaseName = multibaseName
 
     CID.validateCID(this)
   }
@@ -2940,18 +2399,26 @@ class CID {
    * @memberOf CID
    */
   get buffer () {
-    switch (this.version) {
-      case 0:
-        return this.multihash
-      case 1:
-        return Buffer.concat([
+    let buffer = this._buffer
+
+    if (!buffer) {
+      if (this.version === 0) {
+        buffer = this.multihash
+      } else if (this.version === 1) {
+        buffer = Buffer.concat([
           Buffer.from('01', 'hex'),
           multicodec.getCodeVarint(this.codec),
           this.multihash
         ])
-      default:
+      } else {
         throw new Error('unsupported version')
+      }
+
+      // Cache this buffer so it doesn't have to be recreated
+      Object.defineProperty(this, '_buffer', { value: buffer })
     }
+
+    return buffer
   }
 
   /**
@@ -3003,24 +2470,29 @@ class CID {
   /**
    * Encode the CID into a string.
    *
-   * @param {string} [base='base58btc'] - Base encoding to use.
+   * @param {string} [base=this.multibaseName] - Base encoding to use.
    * @returns {string}
    */
-  toBaseEncodedString (base) {
-    base = base || 'base58btc'
-
-    switch (this.version) {
-      case 0: {
-        if (base !== 'base58btc') {
-          throw new Error('not supported with CIDv0, to support different bases, please migrate the instance do CIDv1, you can do that through cid.toV1()')
-        }
-        return mh.toB58String(this.multihash)
-      }
-      case 1:
-        return multibase.encode(base, this.buffer).toString()
-      default:
-        throw new Error('Unsupported version')
+  toBaseEncodedString (base = this.multibaseName) {
+    if (this.string && base === this.multibaseName) {
+      return this.string
     }
+    let str = null
+    if (this.version === 0) {
+      if (base !== 'base58btc') {
+        throw new Error('not supported with CIDv0, to support different bases, please migrate the instance do CIDv1, you can do that through cid.toV1()')
+      }
+      str = mh.toB58String(this.multihash)
+    } else if (this.version === 1) {
+      str = multibase.encode(base, this.buffer).toString()
+    } else {
+      throw new Error('unsupported version')
+    }
+    if (base === this.multibaseName) {
+      // cache the string value
+      Object.defineProperty(this, 'string', { value: str })
+    }
+    return str
   }
 
   toString (base) {
@@ -3077,7 +2549,7 @@ _CID.codecs = codecs
 module.exports = _CID
 
 }).call(this,require("buffer").Buffer)
-},{"./cid-util":11,"buffer":5,"class-is":13,"multibase":22,"multicodec":7,"multicodec/src/base-table":6,"multihashes":31}],13:[function(require,module,exports){
+},{"./cid-util":6,"buffer":5,"class-is":8,"multibase":17,"multicodec":20,"multicodec/src/base-table":18,"multihashes":26}],8:[function(require,module,exports){
 'use strict';
 
 function withIs(Class, { className, symbolName }) {
@@ -3145,7 +2617,7 @@ function withIsProto(Class, { className, symbolName, withoutNew }) {
 module.exports = withIs;
 module.exports.proto = withIsProto;
 
-},{}],14:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = (nBytes * 8) - mLen - 1
@@ -3231,7 +2703,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],15:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 /*!
  * Determine if an object is a Buffer
  *
@@ -3254,7 +2726,7 @@ function isSlowBuffer (obj) {
   return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isBuffer(obj.slice(0, 0))
 }
 
-},{}],16:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 // base-x encoding
 // Forked from https://github.com/cryptocoinjs/bs58
 // Originally written by Mike Hearn for BitcoinJ
@@ -3348,7 +2820,7 @@ module.exports = function base (ALPHABET) {
   }
 }
 
-},{"safe-buffer":32}],17:[function(require,module,exports){
+},{"safe-buffer":27}],12:[function(require,module,exports){
 'use strict'
 
 class Base {
@@ -3376,7 +2848,7 @@ class Base {
 
 module.exports = Base
 
-},{}],18:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -3400,7 +2872,7 @@ module.exports = function base16 (alphabet) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],19:[function(require,module,exports){
+},{"buffer":5}],14:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -3485,7 +2957,7 @@ module.exports = function base32 (alphabet) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],20:[function(require,module,exports){
+},{"buffer":5}],15:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -3532,7 +3004,7 @@ module.exports = function base64 (alphabet) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],21:[function(require,module,exports){
+},{"buffer":5}],16:[function(require,module,exports){
 'use strict'
 
 const Base = require('./base.js')
@@ -3576,7 +3048,7 @@ module.exports = {
   codes: codes
 }
 
-},{"./base.js":17,"./base16":18,"./base32":19,"./base64":20,"base-x":16}],22:[function(require,module,exports){
+},{"./base.js":12,"./base16":13,"./base32":14,"./base64":15,"base-x":11}],17:[function(require,module,exports){
 (function (Buffer){
 /**
  * Implementation of the [multibase](https://github.com/multiformats/multibase) specification.
@@ -3711,40 +3183,34 @@ function getBase (nameOrCode) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./constants":21,"buffer":5}],23:[function(require,module,exports){
+},{"./constants":16,"buffer":5}],18:[function(require,module,exports){
 (function (Buffer){
 // THIS FILE IS GENERATED, DO NO EDIT MANUALLY
 // For more information see the README.md
 /* eslint-disable dot-notation */
 'use strict'
 
-// miscellaneous
-exports['raw'] = Buffer.from('55', 'hex')
-
-// serialization formats
-exports['cbor'] = Buffer.from('51', 'hex')
+// serialization
 exports['protobuf'] = Buffer.from('50', 'hex')
+exports['cbor'] = Buffer.from('51', 'hex')
 exports['rlp'] = Buffer.from('60', 'hex')
 exports['bencode'] = Buffer.from('63', 'hex')
 
-// multiformats
+// multiformat
 exports['multicodec'] = Buffer.from('30', 'hex')
 exports['multihash'] = Buffer.from('31', 'hex')
 exports['multiaddr'] = Buffer.from('32', 'hex')
 exports['multibase'] = Buffer.from('33', 'hex')
 
-// multihashes
+// multihash
 exports['identity'] = Buffer.from('00', 'hex')
-exports['md4'] = Buffer.from('d4', 'hex')
-exports['md5'] = Buffer.from('d5', 'hex')
 exports['sha1'] = Buffer.from('11', 'hex')
 exports['sha2-256'] = Buffer.from('12', 'hex')
 exports['sha2-512'] = Buffer.from('13', 'hex')
-exports['dbl-sha2-256'] = Buffer.from('56', 'hex')
-exports['sha3-224'] = Buffer.from('17', 'hex')
-exports['sha3-256'] = Buffer.from('16', 'hex')
-exports['sha3-384'] = Buffer.from('15', 'hex')
 exports['sha3-512'] = Buffer.from('14', 'hex')
+exports['sha3-384'] = Buffer.from('15', 'hex')
+exports['sha3-256'] = Buffer.from('16', 'hex')
+exports['sha3-224'] = Buffer.from('17', 'hex')
 exports['shake-128'] = Buffer.from('18', 'hex')
 exports['shake-256'] = Buffer.from('19', 'hex')
 exports['keccak-224'] = Buffer.from('1a', 'hex')
@@ -3753,6 +3219,10 @@ exports['keccak-384'] = Buffer.from('1c', 'hex')
 exports['keccak-512'] = Buffer.from('1d', 'hex')
 exports['murmur3-128'] = Buffer.from('22', 'hex')
 exports['murmur3-32'] = Buffer.from('23', 'hex')
+exports['dbl-sha2-256'] = Buffer.from('56', 'hex')
+exports['md4'] = Buffer.from('d4', 'hex')
+exports['md5'] = Buffer.from('d5', 'hex')
+exports['bmt'] = Buffer.from('d6', 'hex')
 exports['x11'] = Buffer.from('1100', 'hex')
 exports['blake2b-8'] = Buffer.from('b201', 'hex')
 exports['blake2b-16'] = Buffer.from('b202', 'hex')
@@ -4075,42 +3545,47 @@ exports['skein1024-1008'] = Buffer.from('b3de', 'hex')
 exports['skein1024-1016'] = Buffer.from('b3df', 'hex')
 exports['skein1024-1024'] = Buffer.from('b3e0', 'hex')
 
-// multiaddrs
+// multiaddr
 exports['ip4'] = Buffer.from('04', 'hex')
+exports['tcp'] = Buffer.from('06', 'hex')
+exports['dccp'] = Buffer.from('21', 'hex')
 exports['ip6'] = Buffer.from('29', 'hex')
 exports['ip6zone'] = Buffer.from('2a', 'hex')
-exports['tcp'] = Buffer.from('06', 'hex')
-exports['udp'] = Buffer.from('0111', 'hex')
-exports['dccp'] = Buffer.from('21', 'hex')
-exports['sctp'] = Buffer.from('84', 'hex')
-exports['udt'] = Buffer.from('012d', 'hex')
-exports['utp'] = Buffer.from('012e', 'hex')
-exports['p2p'] = Buffer.from('01a5', 'hex')
-exports['ipfs'] = Buffer.from('01a5', 'hex')
-exports['http'] = Buffer.from('01e0', 'hex')
-exports['https'] = Buffer.from('01bb', 'hex')
-exports['quic'] = Buffer.from('01cc', 'hex')
-exports['ws'] = Buffer.from('01dd', 'hex')
-exports['wss'] = Buffer.from('01de', 'hex')
-exports['onion'] = Buffer.from('01bc', 'hex')
-exports['onion3'] = Buffer.from('01bd', 'hex')
-exports['garlic64'] = Buffer.from('01be', 'hex')
-exports['p2p-circuit'] = Buffer.from('0122', 'hex')
 exports['dns'] = Buffer.from('35', 'hex')
 exports['dns4'] = Buffer.from('36', 'hex')
 exports['dns6'] = Buffer.from('37', 'hex')
 exports['dnsaddr'] = Buffer.from('38', 'hex')
-exports['p2p-websocket-star'] = Buffer.from('01df', 'hex')
-exports['p2p-stardust'] = Buffer.from('0115', 'hex')
+exports['sctp'] = Buffer.from('84', 'hex')
+exports['udp'] = Buffer.from('0111', 'hex')
 exports['p2p-webrtc-star'] = Buffer.from('0113', 'hex')
 exports['p2p-webrtc-direct'] = Buffer.from('0114', 'hex')
+exports['p2p-stardust'] = Buffer.from('0115', 'hex')
+exports['p2p-circuit'] = Buffer.from('0122', 'hex')
+exports['udt'] = Buffer.from('012d', 'hex')
+exports['utp'] = Buffer.from('012e', 'hex')
 exports['unix'] = Buffer.from('0190', 'hex')
+exports['p2p'] = Buffer.from('01a5', 'hex')
+exports['ipfs'] = Buffer.from('01a5', 'hex')
+exports['https'] = Buffer.from('01bb', 'hex')
+exports['onion'] = Buffer.from('01bc', 'hex')
+exports['onion3'] = Buffer.from('01bd', 'hex')
+exports['garlic64'] = Buffer.from('01be', 'hex')
+exports['quic'] = Buffer.from('01cc', 'hex')
+exports['ws'] = Buffer.from('01dd', 'hex')
+exports['wss'] = Buffer.from('01de', 'hex')
+exports['p2p-websocket-star'] = Buffer.from('01df', 'hex')
+exports['http'] = Buffer.from('01e0', 'hex')
 
-// IPLD formats
+// ipld
+exports['raw'] = Buffer.from('55', 'hex')
 exports['dag-pb'] = Buffer.from('70', 'hex')
 exports['dag-cbor'] = Buffer.from('71', 'hex')
-exports['dag-json'] = Buffer.from('0129', 'hex')
 exports['git-raw'] = Buffer.from('78', 'hex')
+exports['torrent-info'] = Buffer.from('7b', 'hex')
+exports['torrent-file'] = Buffer.from('7c', 'hex')
+exports['leofcoin-block'] = Buffer.from('81', 'hex')
+exports['leofcoin-tx'] = Buffer.from('82', 'hex')
+exports['leofcoin-pr'] = Buffer.from('83', 'hex')
 exports['eth-block'] = Buffer.from('90', 'hex')
 exports['eth-block-list'] = Buffer.from('91', 'hex')
 exports['eth-tx-trie'] = Buffer.from('92', 'hex')
@@ -4130,53 +3605,56 @@ exports['decred-block'] = Buffer.from('e0', 'hex')
 exports['decred-tx'] = Buffer.from('e1', 'hex')
 exports['dash-block'] = Buffer.from('f0', 'hex')
 exports['dash-tx'] = Buffer.from('f1', 'hex')
-exports['leofcoin-block'] = Buffer.from('81', 'hex')
-exports['leofcoin-tx'] = Buffer.from('82', 'hex')
-exports['leofcoin-pr'] = Buffer.from('83', 'hex')
-exports['torrent-info'] = Buffer.from('7b', 'hex')
-exports['torrent-file'] = Buffer.from('7c', 'hex')
-exports['ed25519-pub'] = Buffer.from('ed', 'hex')
+exports['swarm-manifest'] = Buffer.from('fa', 'hex')
+exports['swarm-feed'] = Buffer.from('fb', 'hex')
+exports['dag-json'] = Buffer.from('0129', 'hex')
 
-// Content Namespaces
+// namespace
+exports['path'] = Buffer.from('2f', 'hex')
 exports['ipld-ns'] = Buffer.from('e2', 'hex')
 exports['ipfs-ns'] = Buffer.from('e3', 'hex')
 exports['swarm-ns'] = Buffer.from('e4', 'hex')
 
+// key
+exports['ed25519-pub'] = Buffer.from('ed', 'hex')
+
+// holochain
+exports['holochain-adr-v0'] = Buffer.from('807124', 'hex')
+exports['holochain-adr-v1'] = Buffer.from('817124', 'hex')
+exports['holochain-key-v0'] = Buffer.from('947124', 'hex')
+exports['holochain-key-v1'] = Buffer.from('957124', 'hex')
+exports['holochain-sig-v0'] = Buffer.from('a27124', 'hex')
+exports['holochain-sig-v1'] = Buffer.from('a37124', 'hex')
+
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],24:[function(require,module,exports){
+},{"buffer":5}],19:[function(require,module,exports){
 // THIS FILE IS GENERATED, DO NO EDIT MANUALLY
 // For more information see the README.md
 /* eslint-disable dot-notation */
 'use strict'
 module.exports = Object.freeze({
 
-  // miscellaneous,
-  RAW: 0x55,
-
-  // serialization formats,
-  CBOR: 0x51,
+  // serialization
   PROTOBUF: 0x50,
+  CBOR: 0x51,
   RLP: 0x60,
   BENCODE: 0x63,
 
-  // multiformats,
+  // multiformat
   MULTICODEC: 0x30,
   MULTIHASH: 0x31,
   MULTIADDR: 0x32,
   MULTIBASE: 0x33,
 
-  // multihashes,
+  // multihash
   IDENTITY: 0x00,
-  MD4: 0xd4,
-  MD5: 0xd5,
   SHA1: 0x11,
   SHA2_256: 0x12,
   SHA2_512: 0x13,
-  DBL_SHA2_256: 0x56,
-  SHA3_224: 0x17,
-  SHA3_256: 0x16,
-  SHA3_384: 0x15,
   SHA3_512: 0x14,
+  SHA3_384: 0x15,
+  SHA3_256: 0x16,
+  SHA3_224: 0x17,
   SHAKE_128: 0x18,
   SHAKE_256: 0x19,
   KECCAK_224: 0x1a,
@@ -4185,6 +3663,10 @@ module.exports = Object.freeze({
   KECCAK_512: 0x1d,
   MURMUR3_128: 0x22,
   MURMUR3_32: 0x23,
+  DBL_SHA2_256: 0x56,
+  MD4: 0xd4,
+  MD5: 0xd5,
+  BMT: 0xd6,
   X11: 0x1100,
   BLAKE2B_8: 0xb201,
   BLAKE2B_16: 0xb202,
@@ -4507,42 +3989,47 @@ module.exports = Object.freeze({
   SKEIN1024_1016: 0xb3df,
   SKEIN1024_1024: 0xb3e0,
 
-  // multiaddrs,
+  // multiaddr
   IP4: 0x04,
+  TCP: 0x06,
+  DCCP: 0x21,
   IP6: 0x29,
   IP6ZONE: 0x2a,
-  TCP: 0x06,
-  UDP: 0x0111,
-  DCCP: 0x21,
-  SCTP: 0x84,
-  UDT: 0x012d,
-  UTP: 0x012e,
-  P2P: 0x01a5,
-  IPFS: 0x01a5,
-  HTTP: 0x01e0,
-  HTTPS: 0x01bb,
-  QUIC: 0x01cc,
-  WS: 0x01dd,
-  WSS: 0x01de,
-  ONION: 0x01bc,
-  ONION3: 0x01bd,
-  GARLIC64: 0x01be,
-  P2P_CIRCUIT: 0x0122,
   DNS: 0x35,
   DNS4: 0x36,
   DNS6: 0x37,
   DNSADDR: 0x38,
-  P2P_WEBSOCKET_STAR: 0x01df,
-  P2P_STARDUST: 0x0115,
+  SCTP: 0x84,
+  UDP: 0x0111,
   P2P_WEBRTC_STAR: 0x0113,
   P2P_WEBRTC_DIRECT: 0x0114,
+  P2P_STARDUST: 0x0115,
+  P2P_CIRCUIT: 0x0122,
+  UDT: 0x012d,
+  UTP: 0x012e,
   UNIX: 0x0190,
+  P2P: 0x01a5,
+  IPFS: 0x01a5,
+  HTTPS: 0x01bb,
+  ONION: 0x01bc,
+  ONION3: 0x01bd,
+  GARLIC64: 0x01be,
+  QUIC: 0x01cc,
+  WS: 0x01dd,
+  WSS: 0x01de,
+  P2P_WEBSOCKET_STAR: 0x01df,
+  HTTP: 0x01e0,
 
-  // IPLD formats,
+  // ipld
+  RAW: 0x55,
   DAG_PB: 0x70,
   DAG_CBOR: 0x71,
-  DAG_JSON: 0x0129,
   GIT_RAW: 0x78,
+  TORRENT_INFO: 0x7b,
+  TORRENT_FILE: 0x7c,
+  LEOFCOIN_BLOCK: 0x81,
+  LEOFCOIN_TX: 0x82,
+  LEOFCOIN_PR: 0x83,
   ETH_BLOCK: 0x90,
   ETH_BLOCK_LIST: 0x91,
   ETH_TX_TRIE: 0x92,
@@ -4562,20 +4049,29 @@ module.exports = Object.freeze({
   DECRED_TX: 0xe1,
   DASH_BLOCK: 0xf0,
   DASH_TX: 0xf1,
-  LEOFCOIN_BLOCK: 0x81,
-  LEOFCOIN_TX: 0x82,
-  LEOFCOIN_PR: 0x83,
-  TORRENT_INFO: 0x7b,
-  TORRENT_FILE: 0x7c,
-  ED25519_PUB: 0xed,
+  SWARM_MANIFEST: 0xfa,
+  SWARM_FEED: 0xfb,
+  DAG_JSON: 0x0129,
 
-  // Content Namespaces,
+  // namespace
+  PATH: 0x2f,
   IPLD_NS: 0xe2,
   IPFS_NS: 0xe3,
-  SWARM_NS: 0xe4
+  SWARM_NS: 0xe4,
+
+  // key
+  ED25519_PUB: 0xed,
+
+  // holochain
+  HOLOCHAIN_ADR_V0: 0x807124,
+  HOLOCHAIN_ADR_V1: 0x817124,
+  HOLOCHAIN_KEY_V0: 0x947124,
+  HOLOCHAIN_KEY_V1: 0x957124,
+  HOLOCHAIN_SIG_V0: 0xa27124,
+  HOLOCHAIN_SIG_V1: 0xa37124
 })
 
-},{}],25:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 (function (Buffer){
 /**
  * Implementation of the multicodec specification.
@@ -4683,42 +4179,48 @@ Object.assign(exports, constants)
 exports.print = require('./print')
 
 }).call(this,require("buffer").Buffer)
-},{"./constants":24,"./name-table":26,"./print":27,"./util":28,"./varint-table":29,"buffer":5,"varint":35}],26:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"./base-table":23,"dup":8}],27:[function(require,module,exports){
+},{"./constants":19,"./name-table":21,"./print":22,"./util":23,"./varint-table":24,"buffer":5,"varint":30}],21:[function(require,module,exports){
+'use strict'
+const baseTable = require('./base-table')
+
+// this creates a map for code as hexString -> codecName
+
+const nameTable = {}
+module.exports = nameTable
+
+for (let encodingName in baseTable) {
+  let code = baseTable[encodingName]
+  nameTable[code.toString('hex')] = encodingName
+}
+
+},{"./base-table":18}],22:[function(require,module,exports){
 // THIS FILE IS GENERATED, DO NO EDIT MANUALLY
 // For more information see the README.md
 /* eslint-disable dot-notation */
 'use strict'
 module.exports = Object.freeze({
 
-  // miscellaneous,
-  0x55: 'raw',
-
-  // serialization formats,
-  0x51: 'cbor',
+  // serialization
   0x50: 'protobuf',
+  0x51: 'cbor',
   0x60: 'rlp',
   0x63: 'bencode',
 
-  // multiformats,
+  // multiformat
   0x30: 'multicodec',
   0x31: 'multihash',
   0x32: 'multiaddr',
   0x33: 'multibase',
 
-  // multihashes,
+  // multihash
   0x00: 'identity',
-  0xd4: 'md4',
-  0xd5: 'md5',
   0x11: 'sha1',
   0x12: 'sha2-256',
   0x13: 'sha2-512',
-  0x56: 'dbl-sha2-256',
-  0x17: 'sha3-224',
-  0x16: 'sha3-256',
-  0x15: 'sha3-384',
   0x14: 'sha3-512',
+  0x15: 'sha3-384',
+  0x16: 'sha3-256',
+  0x17: 'sha3-224',
   0x18: 'shake-128',
   0x19: 'shake-256',
   0x1a: 'keccak-224',
@@ -4727,6 +4229,10 @@ module.exports = Object.freeze({
   0x1d: 'keccak-512',
   0x22: 'murmur3-128',
   0x23: 'murmur3-32',
+  0x56: 'dbl-sha2-256',
+  0xd4: 'md4',
+  0xd5: 'md5',
+  0xd6: 'bmt',
   0x1100: 'x11',
   0xb201: 'blake2b-8',
   0xb202: 'blake2b-16',
@@ -5049,41 +4555,46 @@ module.exports = Object.freeze({
   0xb3df: 'skein1024-1016',
   0xb3e0: 'skein1024-1024',
 
-  // multiaddrs,
+  // multiaddr
   0x04: 'ip4',
+  0x06: 'tcp',
+  0x21: 'dccp',
   0x29: 'ip6',
   0x2a: 'ip6zone',
-  0x06: 'tcp',
-  0x0111: 'udp',
-  0x21: 'dccp',
-  0x84: 'sctp',
-  0x012d: 'udt',
-  0x012e: 'utp',
-  0x01a5: 'p2p',
-  0x01e0: 'http',
-  0x01bb: 'https',
-  0x01cc: 'quic',
-  0x01dd: 'ws',
-  0x01de: 'wss',
-  0x01bc: 'onion',
-  0x01bd: 'onion3',
-  0x01be: 'garlic64',
-  0x0122: 'p2p-circuit',
   0x35: 'dns',
   0x36: 'dns4',
   0x37: 'dns6',
   0x38: 'dnsaddr',
-  0x01df: 'p2p-websocket-star',
-  0x0115: 'p2p-stardust',
+  0x84: 'sctp',
+  0x0111: 'udp',
   0x0113: 'p2p-webrtc-star',
   0x0114: 'p2p-webrtc-direct',
+  0x0115: 'p2p-stardust',
+  0x0122: 'p2p-circuit',
+  0x012d: 'udt',
+  0x012e: 'utp',
   0x0190: 'unix',
+  0x01a5: 'p2p',
+  0x01bb: 'https',
+  0x01bc: 'onion',
+  0x01bd: 'onion3',
+  0x01be: 'garlic64',
+  0x01cc: 'quic',
+  0x01dd: 'ws',
+  0x01de: 'wss',
+  0x01df: 'p2p-websocket-star',
+  0x01e0: 'http',
 
-  // IPLD formats,
+  // ipld
+  0x55: 'raw',
   0x70: 'dag-pb',
   0x71: 'dag-cbor',
-  0x0129: 'dag-json',
   0x78: 'git-raw',
+  0x7b: 'torrent-info',
+  0x7c: 'torrent-file',
+  0x81: 'leofcoin-block',
+  0x82: 'leofcoin-tx',
+  0x83: 'leofcoin-pr',
   0x90: 'eth-block',
   0x91: 'eth-block-list',
   0x92: 'eth-tx-trie',
@@ -5103,24 +4614,77 @@ module.exports = Object.freeze({
   0xe1: 'decred-tx',
   0xf0: 'dash-block',
   0xf1: 'dash-tx',
-  0x81: 'leofcoin-block',
-  0x82: 'leofcoin-tx',
-  0x83: 'leofcoin-pr',
-  0x7b: 'torrent-info',
-  0x7c: 'torrent-file',
-  0xed: 'ed25519-pub',
+  0xfa: 'swarm-manifest',
+  0xfb: 'swarm-feed',
+  0x0129: 'dag-json',
 
-  // Content Namespaces,
+  // namespace
+  0x2f: 'path',
   0xe2: 'ipld-ns',
   0xe3: 'ipfs-ns',
-  0xe4: 'swarm-ns'
+  0xe4: 'swarm-ns',
+
+  // key
+  0xed: 'ed25519-pub',
+
+  // holochain
+  0x807124: 'holochain-adr-v0',
+  0x817124: 'holochain-adr-v1',
+  0x947124: 'holochain-key-v0',
+  0x957124: 'holochain-key-v1',
+  0xa27124: 'holochain-sig-v0',
+  0xa37124: 'holochain-sig-v1'
 })
 
-},{}],28:[function(require,module,exports){
-arguments[4][9][0].apply(exports,arguments)
-},{"buffer":5,"dup":9,"varint":35}],29:[function(require,module,exports){
-arguments[4][10][0].apply(exports,arguments)
-},{"./base-table":23,"./util":28,"dup":10}],30:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
+(function (Buffer){
+'use strict'
+const varint = require('varint')
+
+module.exports = {
+  numberToBuffer,
+  bufferToNumber,
+  varintBufferEncode,
+  varintBufferDecode
+}
+
+function bufferToNumber (buf) {
+  return parseInt(buf.toString('hex'), 16)
+}
+
+function numberToBuffer (num) {
+  let hexString = num.toString(16)
+  if (hexString.length % 2 === 1) {
+    hexString = '0' + hexString
+  }
+  return Buffer.from(hexString, 'hex')
+}
+
+function varintBufferEncode (input) {
+  return Buffer.from(varint.encode(bufferToNumber(input)))
+}
+
+function varintBufferDecode (input) {
+  return numberToBuffer(varint.decode(input))
+}
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":5,"varint":30}],24:[function(require,module,exports){
+'use strict'
+const baseTable = require('./base-table')
+const varintBufferEncode = require('./util').varintBufferEncode
+
+// this creates a map for codecName -> codeVarintBuffer
+
+const varintTable = {}
+module.exports = varintTable
+
+for (let encodingName in baseTable) {
+  let code = baseTable[encodingName]
+  varintTable[encodingName] = varintBufferEncode(code)
+}
+
+},{"./base-table":18,"./util":23}],25:[function(require,module,exports){
 /* eslint quote-props: off */
 /* eslint key-spacing: off */
 'use strict'
@@ -6147,7 +5711,7 @@ exports.defaultLengths = Object.freeze({
   0xb3e0: 0x80
 })
 
-},{}],31:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 (function (Buffer){
 /**
  * Multihash implementation in JavaScript.
@@ -6376,7 +5940,7 @@ exports.prefix = function prefix (multihash) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./constants":30,"bs58":4,"buffer":5,"varint":35}],32:[function(require,module,exports){
+},{"./constants":25,"bs58":4,"buffer":5,"varint":30}],27:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -6440,7 +6004,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":5}],33:[function(require,module,exports){
+},{"buffer":5}],28:[function(require,module,exports){
 module.exports = read
 
 var MSB = 0x80
@@ -6471,7 +6035,7 @@ function read(buf, offset) {
   return res
 }
 
-},{}],34:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 module.exports = encode
 
 var MSB = 0x80
@@ -6499,14 +6063,14 @@ function encode(num, out, offset) {
   return out
 }
 
-},{}],35:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 module.exports = {
     encode: require('./encode.js')
   , decode: require('./decode.js')
   , encodingLength: require('./length.js')
 }
 
-},{"./decode.js":33,"./encode.js":34,"./length.js":36}],36:[function(require,module,exports){
+},{"./decode.js":28,"./encode.js":29,"./length.js":31}],31:[function(require,module,exports){
 
 var N1 = Math.pow(2,  7)
 var N2 = Math.pow(2, 14)
@@ -6533,7 +6097,7 @@ module.exports = function (value) {
   )
 }
 
-},{}],37:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 module.exports={
   "name": "content-hash",
   "version": "2.3.0",
@@ -6552,10 +6116,9 @@ module.exports={
   "author": "pldespaigne",
   "license": "ISC",
   "dependencies": {
-    "cids": "^0.5.7",
-    "multicodec": "^0.5.0",
-    "multihashes": "^0.4.14",
-    "varint": "^5.0.0"
+    "cids": "^0.6.0",
+    "multicodec": "^0.5.1",
+    "multihashes": "^0.4.14"
   },
   "devDependencies": {
     "browserify": "^16.2.3",
