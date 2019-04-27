@@ -35,5 +35,7 @@ jobs:
 
       # run tests!
       - run: yarn test
+      # lint
+      - run: yarn run lint
       # build dist
       - run: yarn run build
