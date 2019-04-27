@@ -11,7 +11,8 @@
     "build": "browserify index.js --s contentHash > dist/index.js",
     "demo": "static .",
     "deploy-demo": "echo \"surge demo https://content-hash.surge.sh\"",
-    "test": "mocha"
+    "test": "mocha",
+    "lint": "npx eslint ."
   },
   "author": "pldespaigne",
   "license": "ISC",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "browserify": "^16.2.3",
     "chai": "^4.2.0",
+    "eslint": "^5.16.0",
     "mocha": "^5.2.0",
     "node-static": "^0.7.11"
   },
