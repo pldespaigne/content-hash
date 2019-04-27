@@ -2,7 +2,7 @@
 
 # content-hash
 
-![npm package](https://badge.fury.io/js/content-hash.svg)
+![npm package](https://badge.fury.io/js/content-hash.svg)[![CircleCI](https://circleci.com/gh/pldespaigne/content-hash.svg?style=svg)](https://circleci.com/gh/pldespaigne/content-hash)
 
 >This is a simple package made for encoding and decoding content hashes has specified in the [EIP 1577](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1577.md).
 This package will be useful for every [Ethereum](https://www.ethereum.org/) developer wanting to interact with [EIP 1577](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1577.md) compliant [ENS resolvers](http://docs.ens.domains/en/latest/introduction.html).
