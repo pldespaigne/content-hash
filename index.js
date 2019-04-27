@@ -19,7 +19,7 @@
 const CID = require('cids')
 const multiC = require('multicodec')
 const multiH = require('multihashes')
-const package = require('./package.json')
+const packageJson = require('./package.json')
 
 /**
  * Convert an hexadecimal string to a Buffer, the string can start with or without '0x'
@@ -36,7 +36,7 @@ function hexString(hex) {
 }
 
 module.exports = {
-	version: package.version,
+	version: packageJson.version,
 
 	/**
 	* Decode a Content Hash.
