@@ -20,7 +20,7 @@
 const CID = require('cids')
 const multiC = require('multicodec')
 const multiH = require('multihashes')
-const package = require('./package.json')
+const packageJson = require('./package.json')
 
 /**
  * Convert an hexadecimal string to a Buffer, the string can start with or without '0x'
@@ -37,7 +37,7 @@ function hexString(hex) {
 }
 
 module.exports = {
-	version: package.version,
+	version: packageJson.version,
 
 	/**
 	* Decode a Content Hash.
@@ -2220,15 +2220,6 @@ var CIDUtil = {
       return 'codec must be string'
     }
 
-    if (other.version === 0) {
-      if (other.codec !== 'dag-pb') {
-        return `codec must be 'dag-pb' for CIDv0`
-      }
-      if (other.multibaseName !== 'base58btc') {
-        return `multibaseName must be 'base58btc' for CIDv0`
-      }
-    }
-
     if (!Buffer.isBuffer(other.multihash)) {
       return 'multihash must be a Buffer'
     }
@@ -2264,6 +2255,7 @@ const withIs = require('class-is')
  * @param {string} codec
  * @param {number} version
  * @param {Buffer} multihash
+ *
  */
 
 /**
@@ -2286,91 +2278,65 @@ class CID {
    *
    * The algorithm for argument input is roughly:
    * ```
-   * if (cid)
-   *   -> create a copy
-   * else if (str)
+   * if (str)
    *   if (1st char is on multibase table) -> CID String
    *   else -> bs58 encoded multihash
    * else if (Buffer)
-   *   if (1st byte is 0 or 1) -> CID
+   *   if (0 or 1) -> CID
    *   else -> multihash
    * else if (Number)
    *   -> construct CID by parts
+   *
+   * ..if only JS had traits..
    * ```
    *
    * @param {string|Buffer} version
    * @param {string} [codec]
    * @param {Buffer} [multihash]
-   * @param {string} [multibaseName]
    *
    * @example
-   * new CID(<version>, <codec>, <multihash>, <multibaseName>)
+   *
+   * new CID(<version>, <codec>, <multihash>)
    * new CID(<cidStr>)
    * new CID(<cid.buffer>)
    * new CID(<multihash>)
    * new CID(<bs58 encoded multihash>)
    * new CID(<cid>)
+   *
    */
-  constructor (version, codec, multihash, multibaseName = 'base58btc') {
+  constructor (version, codec, multihash) {
     if (module.exports.isCID(version)) {
-      // version is an exising CID instance
-      const cid = version
+      let cid = version
       this.version = cid.version
       this.codec = cid.codec
       this.multihash = Buffer.from(cid.multihash)
-      this.multibaseName = cid.multibaseName
       return
     }
-
     if (typeof version === 'string') {
-      // e.g. 'base32' or false
-      const baseName = multibase.isEncoded(version)
-      if (baseName) {
-        // version is a CID String encoded with multibase, so v1
+      if (multibase.isEncoded(version)) { // CID String (encoded with multibase)
         const cid = multibase.decode(version)
-        this.version = parseInt(cid.slice(0, 1).toString('hex'), 16)
-        this.codec = multicodec.getCodec(cid.slice(1))
-        this.multihash = multicodec.rmPrefix(cid.slice(1))
-        this.multibaseName = baseName
-      } else {
-        // version is a base58btc string multihash, so v0
-        this.version = 0
-        this.codec = 'dag-pb'
-        this.multihash = mh.fromB58String(version)
-        this.multibaseName = 'base58btc'
+        version = parseInt(cid.slice(0, 1).toString('hex'), 16)
+        codec = multicodec.getCodec(cid.slice(1))
+        multihash = multicodec.rmPrefix(cid.slice(1))
+      } else { // bs58 string encoded multihash
+        codec = 'dag-pb'
+        multihash = mh.fromB58String(version)
+        version = 0
       }
-      CID.validateCID(this)
-      Object.defineProperty(this, 'string', { value: version })
-      return
-    }
-
-    if (Buffer.isBuffer(version)) {
+    } else if (Buffer.isBuffer(version)) {
       const firstByte = version.slice(0, 1)
       const v = parseInt(firstByte.toString('hex'), 16)
-      if (v === 0 || v === 1) {
-        // version is a CID buffer
+      if (v === 0 || v === 1) { // CID
         const cid = version
-        this.version = v
-        this.codec = multicodec.getCodec(cid.slice(1))
-        this.multihash = multicodec.rmPrefix(cid.slice(1))
-        this.multibaseName = (v === 0) ? 'base58btc' : multibaseName
-      } else {
-        // version is a raw multihash buffer, so v0
-        this.version = 0
-        this.codec = 'dag-pb'
-        this.multihash = version
-        this.multibaseName = 'base58btc'
+        version = v
+        codec = multicodec.getCodec(cid.slice(1))
+        multihash = multicodec.rmPrefix(cid.slice(1))
+      } else { // multihash
+        codec = 'dag-pb'
+        multihash = version
+        version = 0
       }
-      CID.validateCID(this)
-      return
     }
-
-    // otherwise, assemble the CID from the parameters
-
-    /**
-     * @type {number}
-     */
-    this.version = version
 
     /**
      * @type {string}
@@ -2378,14 +2344,14 @@ class CID {
     this.codec = codec
 
     /**
+     * @type {number}
+     */
+    this.version = version
+
+    /**
      * @type {Buffer}
      */
     this.multihash = multihash
-
-    /**
-     * @type {string}
-     */
-    this.multibaseName = multibaseName
 
     CID.validateCID(this)
   }
@@ -2470,29 +2436,24 @@ class CID {
   /**
    * Encode the CID into a string.
    *
-   * @param {string} [base=this.multibaseName] - Base encoding to use.
+   * @param {string} [base='base58btc'] - Base encoding to use.
    * @returns {string}
    */
-  toBaseEncodedString (base = this.multibaseName) {
-    if (this.string && base === this.multibaseName) {
-      return this.string
-    }
-    let str = null
-    if (this.version === 0) {
-      if (base !== 'base58btc') {
-        throw new Error('not supported with CIDv0, to support different bases, please migrate the instance do CIDv1, you can do that through cid.toV1()')
+  toBaseEncodedString (base) {
+    base = base || 'base58btc'
+
+    switch (this.version) {
+      case 0: {
+        if (base !== 'base58btc') {
+          throw new Error('not supported with CIDv0, to support different bases, please migrate the instance do CIDv1, you can do that through cid.toV1()')
+        }
+        return mh.toB58String(this.multihash)
       }
-      str = mh.toB58String(this.multihash)
-    } else if (this.version === 1) {
-      str = multibase.encode(base, this.buffer).toString()
-    } else {
-      throw new Error('unsupported version')
+      case 1:
+        return multibase.encode(base, this.buffer).toString()
+      default:
+        throw new Error('Unsupported version')
     }
-    if (base === this.multibaseName) {
-      // cache the string value
-      Object.defineProperty(this, 'string', { value: str })
-    }
-    return str
   }
 
   toString (base) {
@@ -3190,27 +3151,33 @@ function getBase (nameOrCode) {
 /* eslint-disable dot-notation */
 'use strict'
 
-// serialization
-exports['protobuf'] = Buffer.from('50', 'hex')
+// miscellaneous
+exports['raw'] = Buffer.from('55', 'hex')
+
+// serialization formats
 exports['cbor'] = Buffer.from('51', 'hex')
+exports['protobuf'] = Buffer.from('50', 'hex')
 exports['rlp'] = Buffer.from('60', 'hex')
 exports['bencode'] = Buffer.from('63', 'hex')
 
-// multiformat
+// multiformats
 exports['multicodec'] = Buffer.from('30', 'hex')
 exports['multihash'] = Buffer.from('31', 'hex')
 exports['multiaddr'] = Buffer.from('32', 'hex')
 exports['multibase'] = Buffer.from('33', 'hex')
 
-// multihash
+// multihashes
 exports['identity'] = Buffer.from('00', 'hex')
+exports['md4'] = Buffer.from('d4', 'hex')
+exports['md5'] = Buffer.from('d5', 'hex')
 exports['sha1'] = Buffer.from('11', 'hex')
 exports['sha2-256'] = Buffer.from('12', 'hex')
 exports['sha2-512'] = Buffer.from('13', 'hex')
-exports['sha3-512'] = Buffer.from('14', 'hex')
-exports['sha3-384'] = Buffer.from('15', 'hex')
-exports['sha3-256'] = Buffer.from('16', 'hex')
+exports['dbl-sha2-256'] = Buffer.from('56', 'hex')
 exports['sha3-224'] = Buffer.from('17', 'hex')
+exports['sha3-256'] = Buffer.from('16', 'hex')
+exports['sha3-384'] = Buffer.from('15', 'hex')
+exports['sha3-512'] = Buffer.from('14', 'hex')
 exports['shake-128'] = Buffer.from('18', 'hex')
 exports['shake-256'] = Buffer.from('19', 'hex')
 exports['keccak-224'] = Buffer.from('1a', 'hex')
@@ -3219,10 +3186,6 @@ exports['keccak-384'] = Buffer.from('1c', 'hex')
 exports['keccak-512'] = Buffer.from('1d', 'hex')
 exports['murmur3-128'] = Buffer.from('22', 'hex')
 exports['murmur3-32'] = Buffer.from('23', 'hex')
-exports['dbl-sha2-256'] = Buffer.from('56', 'hex')
-exports['md4'] = Buffer.from('d4', 'hex')
-exports['md5'] = Buffer.from('d5', 'hex')
-exports['bmt'] = Buffer.from('d6', 'hex')
 exports['x11'] = Buffer.from('1100', 'hex')
 exports['blake2b-8'] = Buffer.from('b201', 'hex')
 exports['blake2b-16'] = Buffer.from('b202', 'hex')
@@ -3545,47 +3508,42 @@ exports['skein1024-1008'] = Buffer.from('b3de', 'hex')
 exports['skein1024-1016'] = Buffer.from('b3df', 'hex')
 exports['skein1024-1024'] = Buffer.from('b3e0', 'hex')
 
-// multiaddr
+// multiaddrs
 exports['ip4'] = Buffer.from('04', 'hex')
-exports['tcp'] = Buffer.from('06', 'hex')
-exports['dccp'] = Buffer.from('21', 'hex')
 exports['ip6'] = Buffer.from('29', 'hex')
 exports['ip6zone'] = Buffer.from('2a', 'hex')
+exports['tcp'] = Buffer.from('06', 'hex')
+exports['udp'] = Buffer.from('0111', 'hex')
+exports['dccp'] = Buffer.from('21', 'hex')
+exports['sctp'] = Buffer.from('84', 'hex')
+exports['udt'] = Buffer.from('012d', 'hex')
+exports['utp'] = Buffer.from('012e', 'hex')
+exports['p2p'] = Buffer.from('01a5', 'hex')
+exports['ipfs'] = Buffer.from('01a5', 'hex')
+exports['http'] = Buffer.from('01e0', 'hex')
+exports['https'] = Buffer.from('01bb', 'hex')
+exports['quic'] = Buffer.from('01cc', 'hex')
+exports['ws'] = Buffer.from('01dd', 'hex')
+exports['wss'] = Buffer.from('01de', 'hex')
+exports['onion'] = Buffer.from('01bc', 'hex')
+exports['onion3'] = Buffer.from('01bd', 'hex')
+exports['garlic64'] = Buffer.from('01be', 'hex')
+exports['p2p-circuit'] = Buffer.from('0122', 'hex')
 exports['dns'] = Buffer.from('35', 'hex')
 exports['dns4'] = Buffer.from('36', 'hex')
 exports['dns6'] = Buffer.from('37', 'hex')
 exports['dnsaddr'] = Buffer.from('38', 'hex')
-exports['sctp'] = Buffer.from('84', 'hex')
-exports['udp'] = Buffer.from('0111', 'hex')
+exports['p2p-websocket-star'] = Buffer.from('01df', 'hex')
+exports['p2p-stardust'] = Buffer.from('0115', 'hex')
 exports['p2p-webrtc-star'] = Buffer.from('0113', 'hex')
 exports['p2p-webrtc-direct'] = Buffer.from('0114', 'hex')
-exports['p2p-stardust'] = Buffer.from('0115', 'hex')
-exports['p2p-circuit'] = Buffer.from('0122', 'hex')
-exports['udt'] = Buffer.from('012d', 'hex')
-exports['utp'] = Buffer.from('012e', 'hex')
 exports['unix'] = Buffer.from('0190', 'hex')
-exports['p2p'] = Buffer.from('01a5', 'hex')
-exports['ipfs'] = Buffer.from('01a5', 'hex')
-exports['https'] = Buffer.from('01bb', 'hex')
-exports['onion'] = Buffer.from('01bc', 'hex')
-exports['onion3'] = Buffer.from('01bd', 'hex')
-exports['garlic64'] = Buffer.from('01be', 'hex')
-exports['quic'] = Buffer.from('01cc', 'hex')
-exports['ws'] = Buffer.from('01dd', 'hex')
-exports['wss'] = Buffer.from('01de', 'hex')
-exports['p2p-websocket-star'] = Buffer.from('01df', 'hex')
-exports['http'] = Buffer.from('01e0', 'hex')
 
-// ipld
-exports['raw'] = Buffer.from('55', 'hex')
+// IPLD formats
 exports['dag-pb'] = Buffer.from('70', 'hex')
 exports['dag-cbor'] = Buffer.from('71', 'hex')
+exports['dag-json'] = Buffer.from('0129', 'hex')
 exports['git-raw'] = Buffer.from('78', 'hex')
-exports['torrent-info'] = Buffer.from('7b', 'hex')
-exports['torrent-file'] = Buffer.from('7c', 'hex')
-exports['leofcoin-block'] = Buffer.from('81', 'hex')
-exports['leofcoin-tx'] = Buffer.from('82', 'hex')
-exports['leofcoin-pr'] = Buffer.from('83', 'hex')
 exports['eth-block'] = Buffer.from('90', 'hex')
 exports['eth-block-list'] = Buffer.from('91', 'hex')
 exports['eth-tx-trie'] = Buffer.from('92', 'hex')
@@ -3605,26 +3563,17 @@ exports['decred-block'] = Buffer.from('e0', 'hex')
 exports['decred-tx'] = Buffer.from('e1', 'hex')
 exports['dash-block'] = Buffer.from('f0', 'hex')
 exports['dash-tx'] = Buffer.from('f1', 'hex')
-exports['swarm-manifest'] = Buffer.from('fa', 'hex')
-exports['swarm-feed'] = Buffer.from('fb', 'hex')
-exports['dag-json'] = Buffer.from('0129', 'hex')
+exports['leofcoin-block'] = Buffer.from('81', 'hex')
+exports['leofcoin-tx'] = Buffer.from('82', 'hex')
+exports['leofcoin-pr'] = Buffer.from('83', 'hex')
+exports['torrent-info'] = Buffer.from('7b', 'hex')
+exports['torrent-file'] = Buffer.from('7c', 'hex')
+exports['ed25519-pub'] = Buffer.from('ed', 'hex')
 
-// namespace
-exports['path'] = Buffer.from('2f', 'hex')
+// Content Namespaces
 exports['ipld-ns'] = Buffer.from('e2', 'hex')
 exports['ipfs-ns'] = Buffer.from('e3', 'hex')
 exports['swarm-ns'] = Buffer.from('e4', 'hex')
-
-// key
-exports['ed25519-pub'] = Buffer.from('ed', 'hex')
-
-// holochain
-exports['holochain-adr-v0'] = Buffer.from('807124', 'hex')
-exports['holochain-adr-v1'] = Buffer.from('817124', 'hex')
-exports['holochain-key-v0'] = Buffer.from('947124', 'hex')
-exports['holochain-key-v1'] = Buffer.from('957124', 'hex')
-exports['holochain-sig-v0'] = Buffer.from('a27124', 'hex')
-exports['holochain-sig-v1'] = Buffer.from('a37124', 'hex')
 
 }).call(this,require("buffer").Buffer)
 },{"buffer":5}],19:[function(require,module,exports){
@@ -3634,27 +3583,33 @@ exports['holochain-sig-v1'] = Buffer.from('a37124', 'hex')
 'use strict'
 module.exports = Object.freeze({
 
-  // serialization
-  PROTOBUF: 0x50,
+  // miscellaneous,
+  RAW: 0x55,
+
+  // serialization formats,
   CBOR: 0x51,
+  PROTOBUF: 0x50,
   RLP: 0x60,
   BENCODE: 0x63,
 
-  // multiformat
+  // multiformats,
   MULTICODEC: 0x30,
   MULTIHASH: 0x31,
   MULTIADDR: 0x32,
   MULTIBASE: 0x33,
 
-  // multihash
+  // multihashes,
   IDENTITY: 0x00,
+  MD4: 0xd4,
+  MD5: 0xd5,
   SHA1: 0x11,
   SHA2_256: 0x12,
   SHA2_512: 0x13,
-  SHA3_512: 0x14,
-  SHA3_384: 0x15,
-  SHA3_256: 0x16,
+  DBL_SHA2_256: 0x56,
   SHA3_224: 0x17,
+  SHA3_256: 0x16,
+  SHA3_384: 0x15,
+  SHA3_512: 0x14,
   SHAKE_128: 0x18,
   SHAKE_256: 0x19,
   KECCAK_224: 0x1a,
@@ -3663,10 +3618,6 @@ module.exports = Object.freeze({
   KECCAK_512: 0x1d,
   MURMUR3_128: 0x22,
   MURMUR3_32: 0x23,
-  DBL_SHA2_256: 0x56,
-  MD4: 0xd4,
-  MD5: 0xd5,
-  BMT: 0xd6,
   X11: 0x1100,
   BLAKE2B_8: 0xb201,
   BLAKE2B_16: 0xb202,
@@ -3989,47 +3940,42 @@ module.exports = Object.freeze({
   SKEIN1024_1016: 0xb3df,
   SKEIN1024_1024: 0xb3e0,
 
-  // multiaddr
+  // multiaddrs,
   IP4: 0x04,
-  TCP: 0x06,
-  DCCP: 0x21,
   IP6: 0x29,
   IP6ZONE: 0x2a,
+  TCP: 0x06,
+  UDP: 0x0111,
+  DCCP: 0x21,
+  SCTP: 0x84,
+  UDT: 0x012d,
+  UTP: 0x012e,
+  P2P: 0x01a5,
+  IPFS: 0x01a5,
+  HTTP: 0x01e0,
+  HTTPS: 0x01bb,
+  QUIC: 0x01cc,
+  WS: 0x01dd,
+  WSS: 0x01de,
+  ONION: 0x01bc,
+  ONION3: 0x01bd,
+  GARLIC64: 0x01be,
+  P2P_CIRCUIT: 0x0122,
   DNS: 0x35,
   DNS4: 0x36,
   DNS6: 0x37,
   DNSADDR: 0x38,
-  SCTP: 0x84,
-  UDP: 0x0111,
+  P2P_WEBSOCKET_STAR: 0x01df,
+  P2P_STARDUST: 0x0115,
   P2P_WEBRTC_STAR: 0x0113,
   P2P_WEBRTC_DIRECT: 0x0114,
-  P2P_STARDUST: 0x0115,
-  P2P_CIRCUIT: 0x0122,
-  UDT: 0x012d,
-  UTP: 0x012e,
   UNIX: 0x0190,
-  P2P: 0x01a5,
-  IPFS: 0x01a5,
-  HTTPS: 0x01bb,
-  ONION: 0x01bc,
-  ONION3: 0x01bd,
-  GARLIC64: 0x01be,
-  QUIC: 0x01cc,
-  WS: 0x01dd,
-  WSS: 0x01de,
-  P2P_WEBSOCKET_STAR: 0x01df,
-  HTTP: 0x01e0,
 
-  // ipld
-  RAW: 0x55,
+  // IPLD formats,
   DAG_PB: 0x70,
   DAG_CBOR: 0x71,
+  DAG_JSON: 0x0129,
   GIT_RAW: 0x78,
-  TORRENT_INFO: 0x7b,
-  TORRENT_FILE: 0x7c,
-  LEOFCOIN_BLOCK: 0x81,
-  LEOFCOIN_TX: 0x82,
-  LEOFCOIN_PR: 0x83,
   ETH_BLOCK: 0x90,
   ETH_BLOCK_LIST: 0x91,
   ETH_TX_TRIE: 0x92,
@@ -4049,26 +3995,17 @@ module.exports = Object.freeze({
   DECRED_TX: 0xe1,
   DASH_BLOCK: 0xf0,
   DASH_TX: 0xf1,
-  SWARM_MANIFEST: 0xfa,
-  SWARM_FEED: 0xfb,
-  DAG_JSON: 0x0129,
-
-  // namespace
-  PATH: 0x2f,
-  IPLD_NS: 0xe2,
-  IPFS_NS: 0xe3,
-  SWARM_NS: 0xe4,
-
-  // key
+  LEOFCOIN_BLOCK: 0x81,
+  LEOFCOIN_TX: 0x82,
+  LEOFCOIN_PR: 0x83,
+  TORRENT_INFO: 0x7b,
+  TORRENT_FILE: 0x7c,
   ED25519_PUB: 0xed,
 
-  // holochain
-  HOLOCHAIN_ADR_V0: 0x807124,
-  HOLOCHAIN_ADR_V1: 0x817124,
-  HOLOCHAIN_KEY_V0: 0x947124,
-  HOLOCHAIN_KEY_V1: 0x957124,
-  HOLOCHAIN_SIG_V0: 0xa27124,
-  HOLOCHAIN_SIG_V1: 0xa37124
+  // Content Namespaces,
+  IPLD_NS: 0xe2,
+  IPFS_NS: 0xe3,
+  SWARM_NS: 0xe4
 })
 
 },{}],20:[function(require,module,exports){
@@ -4200,27 +4137,33 @@ for (let encodingName in baseTable) {
 'use strict'
 module.exports = Object.freeze({
 
-  // serialization
-  0x50: 'protobuf',
+  // miscellaneous,
+  0x55: 'raw',
+
+  // serialization formats,
   0x51: 'cbor',
+  0x50: 'protobuf',
   0x60: 'rlp',
   0x63: 'bencode',
 
-  // multiformat
+  // multiformats,
   0x30: 'multicodec',
   0x31: 'multihash',
   0x32: 'multiaddr',
   0x33: 'multibase',
 
-  // multihash
+  // multihashes,
   0x00: 'identity',
+  0xd4: 'md4',
+  0xd5: 'md5',
   0x11: 'sha1',
   0x12: 'sha2-256',
   0x13: 'sha2-512',
-  0x14: 'sha3-512',
-  0x15: 'sha3-384',
-  0x16: 'sha3-256',
+  0x56: 'dbl-sha2-256',
   0x17: 'sha3-224',
+  0x16: 'sha3-256',
+  0x15: 'sha3-384',
+  0x14: 'sha3-512',
   0x18: 'shake-128',
   0x19: 'shake-256',
   0x1a: 'keccak-224',
@@ -4229,10 +4172,6 @@ module.exports = Object.freeze({
   0x1d: 'keccak-512',
   0x22: 'murmur3-128',
   0x23: 'murmur3-32',
-  0x56: 'dbl-sha2-256',
-  0xd4: 'md4',
-  0xd5: 'md5',
-  0xd6: 'bmt',
   0x1100: 'x11',
   0xb201: 'blake2b-8',
   0xb202: 'blake2b-16',
@@ -4555,46 +4494,41 @@ module.exports = Object.freeze({
   0xb3df: 'skein1024-1016',
   0xb3e0: 'skein1024-1024',
 
-  // multiaddr
+  // multiaddrs,
   0x04: 'ip4',
-  0x06: 'tcp',
-  0x21: 'dccp',
   0x29: 'ip6',
   0x2a: 'ip6zone',
+  0x06: 'tcp',
+  0x0111: 'udp',
+  0x21: 'dccp',
+  0x84: 'sctp',
+  0x012d: 'udt',
+  0x012e: 'utp',
+  0x01a5: 'p2p',
+  0x01e0: 'http',
+  0x01bb: 'https',
+  0x01cc: 'quic',
+  0x01dd: 'ws',
+  0x01de: 'wss',
+  0x01bc: 'onion',
+  0x01bd: 'onion3',
+  0x01be: 'garlic64',
+  0x0122: 'p2p-circuit',
   0x35: 'dns',
   0x36: 'dns4',
   0x37: 'dns6',
   0x38: 'dnsaddr',
-  0x84: 'sctp',
-  0x0111: 'udp',
+  0x01df: 'p2p-websocket-star',
+  0x0115: 'p2p-stardust',
   0x0113: 'p2p-webrtc-star',
   0x0114: 'p2p-webrtc-direct',
-  0x0115: 'p2p-stardust',
-  0x0122: 'p2p-circuit',
-  0x012d: 'udt',
-  0x012e: 'utp',
   0x0190: 'unix',
-  0x01a5: 'p2p',
-  0x01bb: 'https',
-  0x01bc: 'onion',
-  0x01bd: 'onion3',
-  0x01be: 'garlic64',
-  0x01cc: 'quic',
-  0x01dd: 'ws',
-  0x01de: 'wss',
-  0x01df: 'p2p-websocket-star',
-  0x01e0: 'http',
 
-  // ipld
-  0x55: 'raw',
+  // IPLD formats,
   0x70: 'dag-pb',
   0x71: 'dag-cbor',
+  0x0129: 'dag-json',
   0x78: 'git-raw',
-  0x7b: 'torrent-info',
-  0x7c: 'torrent-file',
-  0x81: 'leofcoin-block',
-  0x82: 'leofcoin-tx',
-  0x83: 'leofcoin-pr',
   0x90: 'eth-block',
   0x91: 'eth-block-list',
   0x92: 'eth-tx-trie',
@@ -4614,26 +4548,17 @@ module.exports = Object.freeze({
   0xe1: 'decred-tx',
   0xf0: 'dash-block',
   0xf1: 'dash-tx',
-  0xfa: 'swarm-manifest',
-  0xfb: 'swarm-feed',
-  0x0129: 'dag-json',
-
-  // namespace
-  0x2f: 'path',
-  0xe2: 'ipld-ns',
-  0xe3: 'ipfs-ns',
-  0xe4: 'swarm-ns',
-
-  // key
+  0x81: 'leofcoin-block',
+  0x82: 'leofcoin-tx',
+  0x83: 'leofcoin-pr',
+  0x7b: 'torrent-info',
+  0x7c: 'torrent-file',
   0xed: 'ed25519-pub',
 
-  // holochain
-  0x807124: 'holochain-adr-v0',
-  0x817124: 'holochain-adr-v1',
-  0x947124: 'holochain-key-v0',
-  0x957124: 'holochain-key-v1',
-  0xa27124: 'holochain-sig-v0',
-  0xa37124: 'holochain-sig-v1'
+  // Content Namespaces,
+  0xe2: 'ipld-ns',
+  0xe3: 'ipfs-ns',
+  0xe4: 'swarm-ns'
 })
 
 },{}],23:[function(require,module,exports){
@@ -6100,7 +6025,7 @@ module.exports = function (value) {
 },{}],32:[function(require,module,exports){
 module.exports={
   "name": "content-hash",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
   "main": "index.js",
   "repository": {
@@ -6111,7 +6036,8 @@ module.exports={
     "build": "browserify index.js --s contentHash > dist/index.js",
     "demo": "static .",
     "deploy-demo": "echo \"surge demo https://content-hash.surge.sh\"",
-    "test": "mocha"
+    "test": "mocha",
+    "lint": "npx eslint ."
   },
   "author": "pldespaigne",
   "license": "ISC",
@@ -6123,6 +6049,7 @@ module.exports={
   "devDependencies": {
     "browserify": "^16.2.3",
     "chai": "^4.2.0",
+    "eslint": "^5.16.0",
     "mocha": "^5.2.0",
     "node-static": "^0.7.11"
   },
