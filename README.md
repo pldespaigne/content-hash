@@ -80,7 +80,7 @@ This function takes a content hash as a hex **string** and returns the codec as 
 ```javascript
 const encoded = 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 
-const codec = contentHash.getCodecType(encoded) // 'swarm-ns'
+const codec = contentHash.getCodec(encoded) // 'swarm-ns'
 codec === 'ipfs-ns' // false
 ```
 
