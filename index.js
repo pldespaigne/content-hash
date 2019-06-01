@@ -49,21 +49,22 @@ module.exports = {
 
         const codec = multiC.getCodec(buffer) // get the codec
         let value = multiC.rmPrefix(buffer) // get the remaining value
-        let cid = new CID(value) // prepare a cid from value in case the codec is of type ipfs or swarm
+        // prepare a cid from value in case the codec is of type ipfs or swarm
 
         let res = value.toString('hex')
-
-        if (codec === 'swarm-ns') {
-            value = cid.multihash
-            res = multiH.decode(value).digest.toString('hex')
-        } else if (codec === 'ipfs-ns') {
-            value = cid.multihash
-            res = multiH.toB58String(value)
-        } else if (codec === 'onion' || codec === 'onion') { 
-            res = multiH.decode(buffer).digest.toString()
-        } else { // if codec is not of type ipfs/swarm/onion just return the remaining value
-            console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + res)
+        if (codec === 'onion' || codec === 'onion3') {
+            return multiH.decode(buffer).digest.toString()
         }
+        if (codec === 'swarm-ns' || codec === 'ipfs-ns') {
+            let cid = new CID(value)
+            value = cid.multihash
+            if (codec === 'swarm-ns')
+                return multiH.decode(value).digest.toString('hex')
+            if (codec === 'ipfs-ns')
+                return multiH.toB58String(value)
+        }
+
+        console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + res)
         return res
     },
 
