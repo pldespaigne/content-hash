@@ -114,7 +114,7 @@ module.exports = {
             throw new Error('Invalid onion address')
         }
         const compositeAddr = code + addr + ':' + port
-        res = multiA(compositeAddr).buffer.toString('hex')
+        const res = multiA(compositeAddr).buffer.toString('hex')
         return res
     },
 
