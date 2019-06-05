@@ -40,21 +40,22 @@ module.exports = {
     version: packageJson.version,
 
     /**
-     * Decode a Content Hash.
-     * @param {string} hash an hex string containing a content hash
-     * @return {string} the decoded content
-     */
-    decode: function(hash) {
+    * Decode a Content Hash.
+    * @param {string} hash an hex string containing a content hash
+    * @return {string} the decoded content
+    */
+    decode: function (hash) {
 
         let buffer = hexString(hash)
-
         const codec = multiC.getCodec(buffer) // get the codec
-        let value = multiC.rmPrefix(buffer) // get the remaining value
-        let res = value.toString('hex')
+
         if (codec === 'onion' || codec === 'onion3') {
             const multiAddr = multiA(buffer)
             return multiAddr.toString()
         }
+
+        let value = multiC.rmPrefix(buffer) // get the remaining value
+        let res = value.toString('hex')
         if (codec === 'swarm-ns' || codec === 'ipfs-ns') {
             // prepare a cid from value in case the codec is of type ipfs or swarm
             let cid = new CID(value)
@@ -70,27 +71,27 @@ module.exports = {
     },
 
     /**
-     * Encode an IPFS address into a content hash
-     * @param {string} ipfsHash string containing an IPFS address
-     * @return {string} the resulting content hash
-     */
-    fromIpfs: function(ipfsHash) {
-        let multihash = multiH.fromB58String(ipfsHash) // get Multihash buffer
-        let res = new CID(1, 'dag-pb', multihash) // create a CIDv1 with the multihash
-        res = multiC.addPrefix('ipfs-ns', res.buffer) // add ipfs codec prefix
+    * Encode an IPFS address into a content hash
+    * @param {string} ipfsHash string containing an IPFS address
+    * @return {string} the resulting content hash
+    */
+    fromIpfs: function (ipfsHash) {
+        let multihash = multiH.fromB58String(ipfsHash)  // get Multihash buffer
+        let res = new CID(1, 'dag-pb', multihash)       // create a CIDv1 with the multihash
+        res = multiC.addPrefix('ipfs-ns', res.buffer)   // add ipfs codec prefix
         return res.toString('hex')
     },
 
     /**
-     * Encode a Swarm address into a content hash
-     * @param {string} swarmHash string containing a Swarm address
-     * @return {string} the resulting content hash
-     */
-    fromSwarm: function(swarmHash) {
+    * Encode a Swarm address into a content hash
+    * @param {string} swarmHash string containing a Swarm address
+    * @return {string} the resulting content hash
+    */
+    fromSwarm: function (swarmHash) {
         swarmHash = hexString(swarmHash)
-        let multihash = multiH.encode(swarmHash, 'keccak-256') // get Multihash buffer
-        let res = new CID(1, 'swarm-manifest', multihash) // create a CIDv1 with the multihash
-        res = multiC.addPrefix('swarm-ns', res.buffer) // add swarm codec prefix
+        let multihash = multiH.encode(swarmHash, 'keccak-256')  // get Multihash buffer
+        let res = new CID(1, 'swarm-manifest', multihash)               // create a CIDv1 with the multihash
+        res = multiC.addPrefix('swarm-ns', res.buffer)          // add swarm codec prefix
         return res.toString('hex')
     },
 
@@ -119,11 +120,11 @@ module.exports = {
     },
 
     /**
-     * Extract the codec of a content hash
-     * @param {string} hash hex string containing a content hash
-     * @return {string} the extracted codec
-     */
-    getCodec: function(hash) {
+    * Extract the codec of a content hash
+    * @param {string} hash hex string containing a content hash
+    * @return {string} the extracted codec
+    */
+    getCodec: function (hash) {
         let buffer = hexString(hash)
         return multiC.getCodec(buffer)
     },
