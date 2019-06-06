@@ -105,6 +105,8 @@ module.exports = {
         let content = onionAddr.split(':')
         if (content.length === 2) {
             port = content[1]
+        } else {
+            port = 80
         }
         addr = content[0]
         if (addr.length === 16) {
