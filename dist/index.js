@@ -1,124 +1,4 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.contentHash = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
-/*
-	ISC License
-
-	Copyright (c) 2019, Pierre-Louis Despaigne
-
-	Permission to use, copy, modify, and/or distribute this software for any
-	purpose with or without fee is hereby granted, provided that the above
-	copyright notice and this permission notice appear in all copies.
-
-	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-	WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-	MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-	ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-	WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-	ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-*/
-
-const CID = require('cids')
-const multiC = require('multicodec')
-const multiH = require('multihashes')
-const packageJson = require('./package.json')
-
-/**
- * Convert an hexadecimal string to a Buffer, the string can start with or without '0x'
- * @param {string} hex an hexadecimal value
- * @return {Buffer} the resulting Buffer
- */
-function hexString(hex) {
-	let prefix = hex.slice(0, 2)
-	let value = hex.slice(2)
-	let res = ''
-	if (prefix === '0x') res = value
-	else res = hex
-	return multiH.fromHexString(res)
-}
-
-/**
- * Increment version number by one depending type of update (major, minor, patch)
- * @example 1.2.3 + patch = 1.2.4,	4.5.6 + minor = 4.6.6
- * @return {string} the good version number
- */
-function getVersion() {
-	const version = packageJson.version.split('.');
-	const major = parseInt(version[0], 10) + (packageJson['next-release'] === 'major' ? 1 : 0);
-	const minor = parseInt(version[1], 10) + (packageJson['next-release'] === 'minor' ? 1 : 0);
-	const patch = parseInt(version[2], 10) + (packageJson['next-release'] === 'patch' ? 1 : 0);
-	const res = `${major}.${minor}.${patch}`;
-	return res;
-}
-
-module.exports = {
-	// we use this function because we need to pre increment the version,
-	// otherwise there will be a shift between "js version" and npm version (because build is done before publish)
-	version: getVersion(),
-
-	/**
-	* Decode a Content Hash.
-	* @param {string} hash an hex string containing a content hash
-	* @return {string} the decoded content
-	*/
-	decode: function (hash) {
-
-		let buffer = hexString(hash)
-		
-		const codec = multiC.getCodec(buffer)	// get the codec
-		let value = multiC.rmPrefix(buffer)		// get the remaining value
-		let cid = new CID(value)				// prepare a cid from value in case the codec is of type ipfs or swarm
-
-		let res = value.toString('hex')
-
-		if (codec === 'swarm-ns'){
-			value = cid.multihash
-			res = multiH.decode(value).digest.toString('hex')
-		} else if (codec === 'ipfs-ns'){
-			value = cid.multihash	
-			res = multiH.toB58String(value)
-		} else { // if codec is not of type ipfs/swarm just return the remaining value
-			console.warn('⚠️ WARNING ⚠️ : unknown codec ' + codec.toString('hex') + ' for content-hash ' + res)
-		}
-		return res
-	},
-
-	/**
-	* Encode an IPFS address into a content hash
-	* @param {string} ipfsHash string containing an IPFS address
-	* @return {string} the resulting content hash
-	*/
-	fromIpfs: function (ipfsHash) {
-		let multihash = multiH.fromB58String(ipfsHash)	// get Multihash buffer
-		let res = new CID(1, 'dag-pb', multihash)		// create a CIDv1 with the multihash
-		res = multiC.addPrefix('ipfs-ns', res.buffer)	// add ipfs codec prefix
-		return res.toString('hex')
-	},
-
-	/**
-	* Encode a Swarm address into a content hash
-	* @param {string} swarmHash string containing a Swarm address
-	* @return {string} the resulting content hash
-	*/
-	fromSwarm: function (swarmHash) {
-		swarmHash = hexString(swarmHash)
-		let multihash = multiH.encode(swarmHash, 'keccak-256')	// get Multihash buffer
-		let res = new CID(1, 'swarm-manifest', multihash)				// create a CIDv1 with the multihash
-		res = multiC.addPrefix('swarm-ns', res.buffer)			// add swarm codec prefix
-		return res.toString('hex')
-	},
-
-	/**
-	* Extract the codec of a content hash
-	* @param {string} hash hex string containing a content hash
-	* @return {string} the extracted codec
-	*/
-	getCodec: function (hash) {
-		let buffer = hexString(hash)
-		return multiC.getCodec(buffer)
-	},
-}
-
-},{"./package.json":31,"cids":7,"multicodec":19,"multihashes":25}],2:[function(require,module,exports){
 // base-x encoding
 // Forked from https://github.com/cryptocoinjs/bs58
 // Originally written by Mike Hearn for BitcoinJ
@@ -212,7 +92,7 @@ module.exports = function base (ALPHABET) {
   }
 }
 
-},{"safe-buffer":26}],3:[function(require,module,exports){
+},{"safe-buffer":25}],2:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -365,13 +245,13 @@ function fromByteArray (uint8) {
   return parts.join('')
 }
 
-},{}],4:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 var basex = require('base-x')
 var ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 module.exports = basex(ALPHABET)
 
-},{"base-x":2}],5:[function(require,module,exports){
+},{"base-x":1}],4:[function(require,module,exports){
 (function (Buffer){
 /*!
  * The buffer module from node.js, for the browser.
@@ -2152,7 +2032,7 @@ function numberIsNaN (obj) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"base64-js":3,"buffer":5,"ieee754":9}],6:[function(require,module,exports){
+},{"base64-js":2,"buffer":4,"ieee754":8}],5:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -2208,7 +2088,7 @@ var CIDUtil = {
 module.exports = CIDUtil
 
 }).call(this,{"isBuffer":require("../../is-buffer/index.js")})
-},{"../../is-buffer/index.js":10,"multihashes":25}],7:[function(require,module,exports){
+},{"../../is-buffer/index.js":9,"multihashes":24}],6:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -2509,7 +2389,7 @@ _CID.codecs = codecs
 module.exports = _CID
 
 }).call(this,require("buffer").Buffer)
-},{"./cid-util":6,"buffer":5,"class-is":8,"multibase":16,"multicodec":19,"multicodec/src/base-table":17,"multihashes":25}],8:[function(require,module,exports){
+},{"./cid-util":5,"buffer":4,"class-is":7,"multibase":15,"multicodec":18,"multicodec/src/base-table":16,"multihashes":24}],7:[function(require,module,exports){
 'use strict';
 
 function withIs(Class, { className, symbolName }) {
@@ -2577,7 +2457,7 @@ function withIsProto(Class, { className, symbolName, withoutNew }) {
 module.exports = withIs;
 module.exports.proto = withIsProto;
 
-},{}],9:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = (nBytes * 8) - mLen - 1
@@ -2663,7 +2543,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],10:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 /*!
  * Determine if an object is a Buffer
  *
@@ -2686,7 +2566,7 @@ function isSlowBuffer (obj) {
   return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isBuffer(obj.slice(0, 0))
 }
 
-},{}],11:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 'use strict'
 
 class Base {
@@ -2714,7 +2594,7 @@ class Base {
 
 module.exports = Base
 
-},{}],12:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -2738,7 +2618,7 @@ module.exports = function base16 (alphabet) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],13:[function(require,module,exports){
+},{"buffer":4}],12:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -2823,7 +2703,7 @@ module.exports = function base32 (alphabet) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],14:[function(require,module,exports){
+},{"buffer":4}],13:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 
@@ -2870,7 +2750,7 @@ module.exports = function base64 (alphabet) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],15:[function(require,module,exports){
+},{"buffer":4}],14:[function(require,module,exports){
 'use strict'
 
 const Base = require('./base.js')
@@ -2914,7 +2794,7 @@ module.exports = {
   codes: codes
 }
 
-},{"./base.js":11,"./base16":12,"./base32":13,"./base64":14,"base-x":2}],16:[function(require,module,exports){
+},{"./base.js":10,"./base16":11,"./base32":12,"./base64":13,"base-x":1}],15:[function(require,module,exports){
 (function (Buffer){
 /**
  * Implementation of the [multibase](https://github.com/multiformats/multibase) specification.
@@ -3049,7 +2929,7 @@ function getBase (nameOrCode) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./constants":15,"buffer":5}],17:[function(require,module,exports){
+},{"./constants":14,"buffer":4}],16:[function(require,module,exports){
 (function (Buffer){
 // THIS FILE IS GENERATED, DO NO EDIT MANUALLY
 // For more information see the README.md
@@ -3436,6 +3316,7 @@ exports['https'] = Buffer.from('01bb', 'hex')
 exports['onion'] = Buffer.from('01bc', 'hex')
 exports['onion3'] = Buffer.from('01bd', 'hex')
 exports['garlic64'] = Buffer.from('01be', 'hex')
+exports['garlic32'] = Buffer.from('01bf', 'hex')
 exports['quic'] = Buffer.from('01cc', 'hex')
 exports['ws'] = Buffer.from('01dd', 'hex')
 exports['wss'] = Buffer.from('01de', 'hex')
@@ -3446,6 +3327,7 @@ exports['http'] = Buffer.from('01e0', 'hex')
 exports['raw'] = Buffer.from('55', 'hex')
 exports['dag-pb'] = Buffer.from('70', 'hex')
 exports['dag-cbor'] = Buffer.from('71', 'hex')
+exports['libp2p-key'] = Buffer.from('72', 'hex')
 exports['git-raw'] = Buffer.from('78', 'hex')
 exports['torrent-info'] = Buffer.from('7b', 'hex')
 exports['torrent-file'] = Buffer.from('7c', 'hex')
@@ -3493,7 +3375,7 @@ exports['holochain-sig-v0'] = Buffer.from('a27124', 'hex')
 exports['holochain-sig-v1'] = Buffer.from('a37124', 'hex')
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5}],18:[function(require,module,exports){
+},{"buffer":4}],17:[function(require,module,exports){
 // THIS FILE IS GENERATED, DO NO EDIT MANUALLY
 // For more information see the README.md
 /* eslint-disable dot-notation */
@@ -3880,6 +3762,7 @@ module.exports = Object.freeze({
   ONION: 0x01bc,
   ONION3: 0x01bd,
   GARLIC64: 0x01be,
+  GARLIC32: 0x01bf,
   QUIC: 0x01cc,
   WS: 0x01dd,
   WSS: 0x01de,
@@ -3890,6 +3773,7 @@ module.exports = Object.freeze({
   RAW: 0x55,
   DAG_PB: 0x70,
   DAG_CBOR: 0x71,
+  LIBP2P_KEY: 0x72,
   GIT_RAW: 0x78,
   TORRENT_INFO: 0x7b,
   TORRENT_FILE: 0x7c,
@@ -3937,7 +3821,7 @@ module.exports = Object.freeze({
   HOLOCHAIN_SIG_V1: 0xa37124
 })
 
-},{}],19:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 (function (Buffer){
 /**
  * Implementation of the multicodec specification.
@@ -4007,6 +3891,28 @@ exports.getCodec = (prefixedData) => {
 }
 
 /**
+ * Get the name of the codec.
+ * @param {number} codec
+ * @returns {string}
+ */
+exports.getName = (codec) => {
+  return codeToCodecName[codec.toString(16)]
+}
+
+/**
+ * Get the code of the codec
+ * @param {string} name
+ * @returns {number}
+ */
+exports.getNumber = (name) => {
+  const code = codecNameToCodeVarint[name]
+  if (code === undefined) {
+    throw new Error('Codec `' + name + '` not found')
+  }
+  return util.varintBufferDecode(code)[0]
+}
+
+/**
  * Get the code of the prefixed data.
  * @param {Buffer} prefixedData
  * @returns {number}
@@ -4045,7 +3951,7 @@ Object.assign(exports, constants)
 exports.print = require('./print')
 
 }).call(this,require("buffer").Buffer)
-},{"./constants":18,"./name-table":20,"./print":21,"./util":22,"./varint-table":23,"buffer":5,"varint":29}],20:[function(require,module,exports){
+},{"./constants":17,"./name-table":19,"./print":20,"./util":21,"./varint-table":22,"buffer":4,"varint":28}],19:[function(require,module,exports){
 'use strict'
 const baseTable = require('./base-table')
 
@@ -4059,7 +3965,7 @@ for (let encodingName in baseTable) {
   nameTable[code.toString('hex')] = encodingName
 }
 
-},{"./base-table":17}],21:[function(require,module,exports){
+},{"./base-table":16}],20:[function(require,module,exports){
 // THIS FILE IS GENERATED, DO NO EDIT MANUALLY
 // For more information see the README.md
 /* eslint-disable dot-notation */
@@ -4445,6 +4351,7 @@ module.exports = Object.freeze({
   0x01bc: 'onion',
   0x01bd: 'onion3',
   0x01be: 'garlic64',
+  0x01bf: 'garlic32',
   0x01cc: 'quic',
   0x01dd: 'ws',
   0x01de: 'wss',
@@ -4455,6 +4362,7 @@ module.exports = Object.freeze({
   0x55: 'raw',
   0x70: 'dag-pb',
   0x71: 'dag-cbor',
+  0x72: 'libp2p-key',
   0x78: 'git-raw',
   0x7b: 'torrent-info',
   0x7c: 'torrent-file',
@@ -4502,7 +4410,7 @@ module.exports = Object.freeze({
   0xa37124: 'holochain-sig-v1'
 })
 
-},{}],22:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 (function (Buffer){
 'use strict'
 const varint = require('varint')
@@ -4535,7 +4443,7 @@ function varintBufferDecode (input) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":5,"varint":29}],23:[function(require,module,exports){
+},{"buffer":4,"varint":28}],22:[function(require,module,exports){
 'use strict'
 const baseTable = require('./base-table')
 const varintBufferEncode = require('./util').varintBufferEncode
@@ -4550,13 +4458,13 @@ for (let encodingName in baseTable) {
   varintTable[encodingName] = varintBufferEncode(code)
 }
 
-},{"./base-table":17,"./util":22}],24:[function(require,module,exports){
+},{"./base-table":16,"./util":21}],23:[function(require,module,exports){
 /* eslint quote-props: off */
 /* eslint key-spacing: off */
 'use strict'
 
 exports.names = Object.freeze({
-  'id':         0x0,
+  'identity':   0x0,
   'sha1':       0x11,
   'sha2-256':   0x12,
   'sha2-512':   0x13,
@@ -4896,6 +4804,9 @@ exports.names = Object.freeze({
 })
 
 exports.codes = Object.freeze({
+  0x0: 'identity',
+
+  // sha family
   0x11: 'sha1',
   0x12: 'sha2-256',
   0x13: 'sha2-512',
@@ -4910,6 +4821,7 @@ exports.codes = Object.freeze({
   0x1B: 'keccak-256',
   0x1C: 'keccak-384',
   0x1D: 'keccak-512',
+
   0x22: 'murmur3-128',
   0x23: 'murmur3-32',
 
@@ -5577,7 +5489,7 @@ exports.defaultLengths = Object.freeze({
   0xb3e0: 0x80
 })
 
-},{}],25:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 (function (Buffer){
 /**
  * Multihash implementation in JavaScript.
@@ -5664,13 +5576,13 @@ exports.decode = function decode (buf) {
     throw new Error('multihash too short. must be > 3 bytes.')
   }
 
-  let code = varint.decode(buf)
+  const code = varint.decode(buf)
   if (!exports.isValidCode(code)) {
     throw new Error(`multihash unknown function code: 0x${code.toString(16)}`)
   }
   buf = buf.slice(varint.decode.bytes)
 
-  let len = varint.decode(buf)
+  const len = varint.decode(buf)
   if (len < 1) {
     throw new Error(`multihash invalid length: 0x${len.toString(16)}`)
   }
@@ -5699,7 +5611,7 @@ exports.decode = function decode (buf) {
  * @returns {Buffer}
  */
 exports.encode = function encode (digest, code, length) {
-  if (!digest || !code) {
+  if (!digest || code === undefined) {
     throw new Error('multihash encode requires at least two args: digest, code')
   }
 
@@ -5735,7 +5647,7 @@ exports.coerceCode = function coerceCode (name) {
   let code = name
 
   if (typeof name === 'string') {
-    if (!cs.names[name]) {
+    if (cs.names[name] === undefined) {
       throw new Error(`Unrecognized hash function named: ${name}`)
     }
     code = cs.names[name]
@@ -5745,7 +5657,7 @@ exports.coerceCode = function coerceCode (name) {
     throw new Error(`Hash function code should be a number. Got: ${code}`)
   }
 
-  if (!cs.codes[code] && !exports.isAppCode(code)) {
+  if (cs.codes[code] === undefined && !exports.isAppCode(code)) {
     throw new Error(`Unrecognized function code: ${code}`)
   }
 
@@ -5806,7 +5718,7 @@ exports.prefix = function prefix (multihash) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./constants":24,"bs58":4,"buffer":5,"varint":29}],26:[function(require,module,exports){
+},{"./constants":23,"bs58":3,"buffer":4,"varint":28}],25:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -5870,7 +5782,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":5}],27:[function(require,module,exports){
+},{"buffer":4}],26:[function(require,module,exports){
 module.exports = read
 
 var MSB = 0x80
@@ -5901,7 +5813,7 @@ function read(buf, offset) {
   return res
 }
 
-},{}],28:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 module.exports = encode
 
 var MSB = 0x80
@@ -5929,14 +5841,14 @@ function encode(num, out, offset) {
   return out
 }
 
-},{}],29:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 module.exports = {
     encode: require('./encode.js')
   , decode: require('./decode.js')
   , encodingLength: require('./length.js')
 }
 
-},{"./decode.js":27,"./encode.js":28,"./length.js":30}],30:[function(require,module,exports){
+},{"./decode.js":26,"./encode.js":27,"./length.js":29}],29:[function(require,module,exports){
 
 var N1 = Math.pow(2,  7)
 var N2 = Math.pow(2, 14)
@@ -5963,11 +5875,11 @@ module.exports = function (value) {
   )
 }
 
-},{}],31:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 module.exports={
   "name": "content-hash",
-  "version": "2.3.2",
-  "next-release":"patch",
+  "version": "2.3.3",
+  "next-release": "minor",
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
   "main": "index.js",
   "repository": {
@@ -5975,7 +5887,7 @@ module.exports={
     "url": "https://github.com/pldespaigne/content-hash"
   },
   "scripts": {
-    "build": "browserify index.js --s contentHash > dist/index.js",
+    "build": "browserify ./src/index.js --s contentHash > ./dist/index.js",
     "demo": "static .",
     "deploy-demo": "echo \"surge demo https://content-hash.surge.sh\"",
     "test": "mocha",
@@ -5985,11 +5897,11 @@ module.exports={
   "license": "ISC",
   "dependencies": {
     "cids": "^0.6.0",
-    "multicodec": "^0.5.1",
-    "multihashes": "^0.4.14"
+    "multicodec": "^0.5.3",
+    "multihashes": "^0.4.15"
   },
   "devDependencies": {
-    "browserify": "^16.2.3",
+    "browserify": "^16.3.0",
     "chai": "^4.2.0",
     "eslint": "^5.16.0",
     "mocha": "^5.2.0",
@@ -6010,5 +5922,221 @@ module.exports={
   ]
 }
 
-},{}]},{},[1])(1)
+},{}],31:[function(require,module,exports){
+/*
+	ISC License
+
+	Copyright (c) 2019, Pierre-Louis Despaigne
+
+	Permission to use, copy, modify, and/or distribute this software for any
+	purpose with or without fee is hereby granted, provided that the above
+	copyright notice and this permission notice appear in all copies.
+
+	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+	WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+	MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+	ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+	WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+	ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+*/
+
+const multiC = require('multicodec');
+
+const packageJson = require('../package.json');
+const { hexStringToBuffer, profiles } = require('./profiles');
+
+/**
+ * Increment version number by one depending type of update (major, minor, patch)
+ * @example 1.2.3 + patch = 1.2.4,	4.5.6 + minor = 4.6.6
+ * @return {string} the good version number
+ */
+function getVersion() {
+	const version = packageJson.version.split('.');
+	const major = parseInt(version[0], 10) + (packageJson['next-release'] === 'major' ? 1 : 0);
+	const minor = parseInt(version[1], 10) + (packageJson['next-release'] === 'minor' ? 1 : 0);
+	const patch = parseInt(version[2], 10) + (packageJson['next-release'] === 'patch' ? 1 : 0);
+	const res = `${major}.${minor}.${patch}`;
+	return res;
+}
+
+module.exports = {
+	// we use this function because we need to pre increment the version,
+	// otherwise there will be a shift between "js version" and npm version (because build is done before publish)
+	version: getVersion(),
+
+	/**
+	* Decode a Content Hash.
+	* @param {string} hash an hex string containing a content hash
+	* @return {string} the decoded content
+	*/
+	decode: function (contentHash) {
+		const buffer = hexStringToBuffer(contentHash);
+		const codec = multiC.getCodec(buffer);
+		const value = multiC.rmPrefix(buffer);
+		return profiles[codec].decode(value);
+	},
+
+	/**
+	* Encode an IPFS address into a content hash
+	* @param {string} ipfsHash string containing an IPFS address
+	* @return {string} the resulting content hash
+	*/
+	fromIpfs: function (ipfsHash) {
+		return this.encode('ipfs-ns', ipfsHash);
+	},
+
+	/**
+	* Encode a Swarm address into a content hash
+	* @param {string} swarmHash string containing a Swarm address
+	* @return {string} the resulting content hash
+	*/
+	fromSwarm: function (swarmHash) {
+		return this.encode('swarm-ns', swarmHash);
+	},
+
+	/**
+	* General purpose encoding function
+  * @param {string} codec 
+  * @param {string} value 
+  */
+	encode: function (codec, value) {
+		value = profiles[codec].encode(value);
+		return multiC.addPrefix(codec, value).toString('hex');
+	},
+	/**
+	* Extract the codec of a content hash
+	* @param {string} hash hex string containing a content hash
+	* @return {string} the extracted codec
+	*/
+	getCodec: function (hash) {
+		let buffer = hexStringToBuffer(hash);
+		return multiC.getCodec(buffer);
+	},
+}
+
+},{"../package.json":30,"./profiles":32,"multicodec":18}],32:[function(require,module,exports){
+(function (Buffer){
+/*
+	ISC License
+
+	Copyright (c) 2019, Pierre-Louis Despaigne
+
+	Permission to use, copy, modify, and/or distribute this software for any
+	purpose with or without fee is hereby granted, provided that the above
+	copyright notice and this permission notice appear in all copies.
+
+	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+	WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+	MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+	ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+	WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+	ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+*/
+
+const CID = require('cids');
+const multiH = require('multihashes');
+
+/**
+ * Convert an hexadecimal string to a Buffer, the string can start with or without '0x'
+ * @param {string} hex an hexadecimal value
+ * @return {Buffer} the resulting Buffer
+ */
+const hexStringToBuffer = (hex) => {
+	let prefix = hex.slice(0, 2);
+	let value = hex.slice(2);
+	let res = '';
+	if (prefix === '0x') res = value;
+	else res = hex;
+	return multiH.fromHexString(res);
+}
+
+/**
+* list of known encoding,
+* encoding should be a function that takes a `string` input,
+* and return a `Buffer` result
+*/
+const encodes = {
+  /**
+  * @param {string} value
+  * @return {Buffer}
+  */
+  swarm: (value) => {
+    const multihash = multiH.encode(hexStringToBuffer(value), 'keccak-256');
+		return new CID(1, 'swarm-manifest', multihash).buffer;
+  },
+  /**
+  * @param {string} value
+  * @return {Buffer}
+  */
+  ipfs: (value) => {
+    const multihash = multiH.fromB58String(value);
+    return new CID(1, 'dag-pb', multihash).buffer;
+  },
+  /**
+  * @param {string} value
+  * @return {Buffer}
+  */
+  utf8: (value) => {
+    return Buffer.from(value, 'utf8');
+  },
+};
+
+/** 
+* list of known decoding,
+* decoding should be a function that takes a `Buffer` input,
+* and return a `string` result
+*/
+const decodes = {
+  /**
+  * @param {Buffer} value 
+  */
+  hexMultiHash: (value) => {
+    const cid = new CID(value);
+    return multiH.decode(cid.multihash).digest.toString('hex');
+  },
+  /**
+  * @param {Buffer} value 
+  */
+  b58MultiHash: (value) => {
+    const cid = new CID(value);
+    return multiH.toB58String(cid.multihash);
+  },
+  /**
+  * @param {Buffer} value 
+  */
+  utf8: (value) => {
+    return value.toString('utf8');
+  },
+};
+
+/**
+* list of known encoding/decoding for a given codec,
+* `encode` should be choosen among the `encodes` fucntions
+* `decode` should be choosen among the `decodes` fucntions
+*/
+const profiles = {
+  'swarm-ns': {
+    encode: encodes.swarm,
+    decode: decodes.hexMultiHash,
+  },
+  'ipfs-ns': {
+    encode: encodes.ipfs,
+    decode: decodes.b58MultiHash,
+  },
+  'onion': {
+    encode: encodes.utf8,
+    decode: decodes.utf8,
+  },
+  'onion3': {
+    encode: encodes.utf8,
+    decode: decodes.utf8,
+  },
+};
+
+exports.hexStringToBuffer = hexStringToBuffer;
+exports.profiles = profiles;
+}).call(this,require("buffer").Buffer)
+},{"buffer":4,"cids":6,"multihashes":24}]},{},[31])(31)
 });
