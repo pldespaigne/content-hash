@@ -19,7 +19,7 @@
   "license": "ISC",
   "dependencies": {
     "cids": "^0.6.0",
-    "multicodec": "^0.5.3",
+    "multicodec": "^0.5.4",
     "multihashes": "^0.4.15"
   },
   "devDependencies": {

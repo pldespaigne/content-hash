@@ -3362,6 +3362,7 @@ exports['path'] = Buffer.from('2f', 'hex')
 exports['ipld-ns'] = Buffer.from('e2', 'hex')
 exports['ipfs-ns'] = Buffer.from('e3', 'hex')
 exports['swarm-ns'] = Buffer.from('e4', 'hex')
+exports['ipns-ns'] = Buffer.from('e5', 'hex')
 
 // key
 exports['ed25519-pub'] = Buffer.from('ed', 'hex')
@@ -3808,6 +3809,7 @@ module.exports = Object.freeze({
   IPLD_NS: 0xe2,
   IPFS_NS: 0xe3,
   SWARM_NS: 0xe4,
+  IPNS_NS: 0xe5,
 
   // key
   ED25519_PUB: 0xed,
@@ -4397,6 +4399,7 @@ module.exports = Object.freeze({
   0xe2: 'ipld-ns',
   0xe3: 'ipfs-ns',
   0xe4: 'swarm-ns',
+  0xe5: 'ipns-ns',
 
   // key
   0xed: 'ed25519-pub',
@@ -5878,7 +5881,7 @@ module.exports = function (value) {
 },{}],30:[function(require,module,exports){
 module.exports={
   "name": "content-hash",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "next-release": "patch",
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
   "main": "index.js",
@@ -5897,7 +5900,7 @@ module.exports={
   "license": "ISC",
   "dependencies": {
     "cids": "^0.6.0",
-    "multicodec": "^0.5.3",
+    "multicodec": "^0.5.4",
     "multihashes": "^0.4.15"
   },
   "devDependencies": {
@@ -6122,6 +6125,10 @@ const profiles = {
     decode: decodes.hexMultiHash,
   },
   'ipfs-ns': {
+    encode: encodes.ipfs,
+    decode: decodes.b58MultiHash,
+  },
+  'ipns-ns': {
     encode: encodes.ipfs,
     decode: decodes.b58MultiHash,
   },

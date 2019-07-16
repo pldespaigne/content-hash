@@ -106,6 +106,10 @@ const profiles = {
     encode: encodes.ipfs,
     decode: decodes.b58MultiHash,
   },
+  'ipns-ns': {
+    encode: encodes.ipfs,
+    decode: decodes.b58MultiHash,
+  },
   'onion': {
     encode: encodes.utf8,
     decode: decodes.utf8,

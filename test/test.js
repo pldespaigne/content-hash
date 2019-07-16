@@ -5,6 +5,7 @@ const contentHash = require('../src/index.js')
 
 const ipfs = 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
 const ipfs_contentHash = 'e3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
+const ipns_contentHash = 'e5010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
 const swarm = 'd1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 const swarm_contentHash = 'e40101fa011b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 const onion = 'zqktlwi4fecvo6ri'
@@ -79,6 +80,20 @@ describe('content-hash', () => {
 		it('should decode', () => {
 			const actual = contentHash.decode(ipfs_contentHash);
 			actual.should.be.equal(ipfs);
+		});
+	});
+	describe('ipns', () => {
+		it('should encode', () => {
+			const actual = contentHash.encode('ipns-ns', ipfs); // ipns & ipfs are the same hash and same encoding, only codec differ
+			actual.should.be.equal(ipns_contentHash);
+		});
+		it('should getCodec', () => {
+			const actual = contentHash.getCodec(ipns_contentHash);
+			actual.should.be.equal('ipns-ns');
+		});
+		it('should decode', () => {
+			const actual = contentHash.decode(ipns_contentHash);
+			actual.should.be.equal(ipfs); // ipns & ipfs are the same hash and same encoding, only codec differ
 		});
 	});
 	describe('onion', () => {
