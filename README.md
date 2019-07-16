@@ -2,16 +2,21 @@
 
 # content-hash
 
-![npm package](https://badge.fury.io/js/content-hash.svg)[![CircleCI](https://circleci.com/gh/pldespaigne/content-hash.svg?style=svg)](https://circleci.com/gh/pldespaigne/content-hash)
+[![npm package](https://img.shields.io/npm/v/content-hash.svg)](https://www.npmjs.com/package/content-hash)[![CircleCI](https://circleci.com/gh/pldespaigne/content-hash.svg?style=svg)](https://circleci.com/gh/pldespaigne/content-hash)![licence](https://img.shields.io/npm/l/content-hash.svg)[![Gitter chat](https://badges.gitter.im/content-hash/lobby.png)](https://gitter.im/content-hash/lobby)[![Beerpay](https://beerpay.io/pldespaigne/content-hash/badge.svg)](https://beerpay.io/pldespaigne/content-hash)
 
 >This is a simple package made for encoding and decoding content hashes has specified in the [EIP 1577](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1577.md).
 This package will be useful for every [Ethereum](https://www.ethereum.org/) developer wanting to interact with [EIP 1577](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1577.md) compliant [ENS resolvers](http://docs.ens.domains/en/latest/introduction.html).
 
-⚠️ The EIP 1577 spec can change rapidlly, expect this lib to do the same !
-
 Here you can find a [live demo](https://content-hash.surge.sh/) of this package.
 * link to [npm](https://www.npmjs.com/package/content-hash)
 * link to [Github](https://github.com/pldespaigne/content-hash)
+
+## 🔠 Supported Codec
+- `swarm-ns`
+- `ipfs-ns`
+- `ipns-ns`
+- `onion`
+- `onion3`
 
 ## 📥 Install
 * via **npm** :
@@ -40,15 +45,15 @@ Import the module in order to use it :
 	<!--From local module-->
 	<script type="text/javascript" src="path/to/dist/index.js"></script>
 	```
-> To rebuild the browser version of the package run `npm run build` into the root folder.
+> To rebuild the browser version of the package run `npm run build` into the root folder. Don't forget to also run `npm run lint` and `npm test` before building !
 
 ## 📕 API
 
 > All hex string **inputs** can be prefixed with `0x`, but it's **not mandatory**.
 
-> All **outputs** are **NOT** prefixed with `0x`
+> ⚠️ All **outputs** are **NOT** prefixed with `0x`
 
-### contentHash.decode( string ) -> string
+### contentHash.decode( contentHash ) -> string
 This function takes a content hash as a hex **string** and returns the decoded content as a **string**.
 ```javascript
 const encoded = 'e3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
@@ -57,8 +62,9 @@ const content = contentHash.decode(encoded)
 // 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
 ```
 
-### contentHash.fromIpfs( string ) -> string
+### contentHash.fromIpfs( ipfsHash ) -> string
 This function takes an IPFS address as a base58 encoded **string** and returns the encoded content hash as a hex **string**.
+> this function just call `contentHash.encode()` under the hood
 ```javascript
 const ipfsHash = 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
 
@@ -68,11 +74,20 @@ const contentH = contentHash.fromIpfs(ipfsHash)
 
 ### contentHash.fromSwarm( swarmHash ) -> string
 This function takes a Swarm address as a hex **string** and returns the encoded content hash as a hex **string**.
+> this function just call `contentHash.encode()` under the hood
 ```javascript
 const swarmHash = 'd1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 
 const contentH = contentHash.fromSwarm(swarmHash)
 // 'e40101701b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
+```
+
+### contentHash.encode( codec, value) -> string
+This function takes a [supported codec](#-supported-codec) as a **string** and a value as a **string** and returns coresponding content hash as a hex **string**.
+```javascript
+const onion = 'zqktlwi4fecvo6ri'
+contentHash.encode('onion', onion);
+// 'bc037a716b746c776934666563766f367269'
 ```
 
 ### contentHash.getCodec( contentHash ) -> string
