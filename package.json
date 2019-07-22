@@ -1,6 +1,6 @@
 {
   "name": "content-hash",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "next-release": "patch",
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
   "main": "./src/index.js",
