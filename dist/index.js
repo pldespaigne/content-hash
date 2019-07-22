@@ -5881,7 +5881,7 @@ module.exports = function (value) {
 },{}],30:[function(require,module,exports){
 module.exports={
   "name": "content-hash",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "next-release": "patch",
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
   "main": "./src/index.js",
