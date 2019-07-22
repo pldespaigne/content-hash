@@ -5884,7 +5884,7 @@ module.exports={
   "version": "2.4.1",
   "next-release": "patch",
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
-  "main": "index.js",
+  "main": "./src/index.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/pldespaigne/content-hash"
