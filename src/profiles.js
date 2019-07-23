@@ -118,6 +118,10 @@ const profiles = {
     encode: encodes.utf8,
     decode: decodes.utf8,
   },
+  'zeronet': {
+    encode: encodes.utf8,
+    decode: decodes.utf8,
+  },
 };
 
 exports.hexStringToBuffer = hexStringToBuffer;
