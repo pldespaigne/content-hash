@@ -12,6 +12,8 @@ const onion = 'zqktlwi4fecvo6ri'
 const onion_contentHash = 'bc037a716b746c776934666563766f367269';
 const onion3 = 'p53lf57qovyuvwsc6xnrppyply3vtqm7l6pcobkmyqsiofyeznfu5uqd';
 const onion3_contentHash = 'bd037035336c663537716f7679757677736336786e72707079706c79337674716d376c3670636f626b6d797173696f6679657a6e667535757164';
+const zeronet = '1HeLLo4uzjaLetFx6NH3PMwFP3qbRbTf3D'
+const zeronet_contentHash = 'e6013148654c4c6f34757a6a614c65744678364e4833504d774650337162526254663344'
 
 describe('content-hash (legacy tests)', () => 
 	{
@@ -122,6 +124,20 @@ describe('content-hash', () => {
 		it('should decode', () => {
 			const actual = contentHash.decode(onion3_contentHash);
 			actual.should.be.equal(onion3);
+		});
+	});
+	describe('zeronet', () => {
+		it('should encode', () => {
+			const actual = contentHash.encode('zeronet', zeronet);
+			actual.should.be.equal(zeronet_contentHash);
+		});
+		it('should getCodec', () => {
+			const actual = contentHash.getCodec(zeronet_contentHash);
+			actual.should.be.equal('zeronet');
+		});
+		it('should decode', () => {
+			const actual = contentHash.decode(zeronet_contentHash);
+			actual.should.be.equal(zeronet);
 		});
 	});
 });
