@@ -34,8 +34,8 @@ window.onload = () => {
 		let url = 'https://'
 		if(codec === 'ipfs') url += 'gateway.ipfs.io/ipfs/' + cth + '/'
 		else if(codec === 'swarm') url += 'swarm-gateways.net/bzz:/' + cth + '/'
-		else if(codec === 'onion') url += cth + '/'
-		else if(codec === 'onion3') url += cth + '/'
+		else if(codec === 'onion') url = 'http://' + cth + '/'
+		else if(codec === 'onion3') url = 'http://' + cth + '/'
 		else if(codec === 'zeronet') url = 'http://127.0.0.1:43110/' + cth + '/'
 		else url = '#'
 
