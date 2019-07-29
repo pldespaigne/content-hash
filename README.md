@@ -17,6 +17,7 @@ Here you can find a [live demo](https://content-hash.surge.sh/) of this package.
 - `ipns-ns`
 - `onion`
 - `onion3`
+- `zeronet`
 
 ## 📥 Install
 * via **npm** :
