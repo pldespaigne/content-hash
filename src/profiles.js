@@ -94,8 +94,8 @@ const decodes = {
 
 /**
 * list of known encoding/decoding for a given codec,
-* `encode` should be choosen among the `encodes` fucntions
-* `decode` should be choosen among the `decodes` fucntions
+* `encode` should be chosen among the `encodes` functions
+* `decode` should be chosen among the `decodes` functions
 */
 const profiles = {
   'swarm-ns': {
@@ -110,11 +110,7 @@ const profiles = {
     encode: encodes.ipfs,
     decode: decodes.b58MultiHash,
   },
-  'onion': {
-    encode: encodes.utf8,
-    decode: decodes.utf8,
-  },
-  'onion3': {
+  'default': {
     encode: encodes.utf8,
     decode: decodes.utf8,
   },

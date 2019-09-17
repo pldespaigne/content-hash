@@ -49,7 +49,9 @@ module.exports = {
 		const buffer = hexStringToBuffer(contentHash);
 		const codec = multiC.getCodec(buffer);
 		const value = multiC.rmPrefix(buffer);
-		return profiles[codec].decode(value);
+		let profile = profiles[codec];
+		if (!profile) profile = profiles['default'];
+		return profile.decode(value);
 	},
 
 	/**
@@ -76,8 +78,10 @@ module.exports = {
   * @param {string} value 
   */
 	encode: function (codec, value) {
-		value = profiles[codec].encode(value);
-		return multiC.addPrefix(codec, value).toString('hex');
+		let profile = profiles[codec];
+		if (!profile) profile = profiles['default'];
+		const encodedValue = profile.encode(value);
+		return multiC.addPrefix(codec, encodedValue).toString('hex');
 	},
 	/**
 	* Extract the codec of a content hash
