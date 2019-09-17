@@ -15,8 +15,8 @@ Here you can find a [live demo](https://content-hash.surge.sh/) of this package.
 - `swarm-ns`
 - `ipfs-ns`
 - `ipns-ns`
-- `onion`
-- `onion3`
+- Every other codec supported by [multicodec](https://github.com/multiformats/multicodec) will be encoded by default in `utf-8`.
+> You can see the full list of codec supported [here](https://github.com/multiformats/multicodec/blob/master/table.csv)
 
 ## 📥 Install
 * via **npm** :
@@ -103,7 +103,7 @@ codec === 'ipfs-ns' // false
 *  pldespaigne : [github](https://github.com/pldespaigne), [twitter](https://twitter.com/pldespaigne)
 
 ## 🙌 Contributing
-For any questions, discussions, bug report, or whatever I will be happy to answer through the [issues](https://github.com/pldespaigne/content-hash/issues) or on my [twitter](https://twitter.com/pldespaigne) 😁. PR are also welcome !
+For any questions, discussions, bug report, or whatever I will be happy to answer through the [issues](https://github.com/pldespaigne/content-hash/issues) or on my [twitter](https://twitter.com/pldespaigne) 😁. PR (with tests) are also welcome !
 
 ## 📝 License
 This project is licensed under the **ISC License**, you can find it [here](https://github.com/pldespaigne/content-hash/blob/master/LICENSE).
