@@ -23,17 +23,20 @@ window.onload = () => {
 	contentButtonElem.addEventListener('click', () => {
 		let cth = contentHash.decode(contentInputElem.value)
 		
-		let codec = 'unknown'
-		
-		if(contentHash.getCodec(contentInputElem.value) === 'ipfs-ns')codec = 'ipfs'
-		else if(contentHash.getCodec(contentInputElem.value) === 'swarm-ns')codec = 'swarm'
+		let codec = contentHash.getCodec(contentInputElem.value)
+		let displayed = codec + ' (utf-8)'
 
-		let url = 'https://'
-		if(codec === 'ipfs') url += 'gateway.ipfs.io/ipfs/' + cth + '/'
-		else if(codec === 'swarm') url += 'swarm-gateways.net/bzz:/' + cth + '/'
+		if(codec === 'ipfs-ns')displayed = 'ipfs'
+		else if(codec === 'swarm-ns')displayed = 'swarm'
+
+		if(codec === 'ipfs-ns') url = 'https://gateway.ipfs.io/ipfs/' + cth + '/'
+		else if(codec === 'swarm-ns') url = 'https://swarm-gateways.net/bzz:/' + cth + '/'
+		else if(codec === 'onion') url = 'http://' + cth + '.onion/'
+		else if(codec === 'onion3') url = 'http://' + cth + '.onion/'
+		else if(codec === 'zeronet') url = 'http://127.0.0.1:43110/' + cth + '/'
 		else url = '#'
 
-		codecResultElem.innerHTML = 'codec : ' + codec
+		codecResultElem.innerHTML = 'codec : ' + displayed
 		contentResultElem.innerHTML = cth
 		contentResultElem.href = url
 	})
