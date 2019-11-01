@@ -4,7 +4,7 @@
 
 [![npm package](https://img.shields.io/npm/v/content-hash.svg)](https://www.npmjs.com/package/content-hash)[![CircleCI](https://circleci.com/gh/pldespaigne/content-hash.svg?style=svg)](https://circleci.com/gh/pldespaigne/content-hash)![licence](https://img.shields.io/npm/l/content-hash.svg)[![Gitter chat](https://badges.gitter.im/content-hash/lobby.png)](https://gitter.im/content-hash/lobby)[![Beerpay](https://beerpay.io/pldespaigne/content-hash/badge.svg)](https://beerpay.io/pldespaigne/content-hash)
 
->This is a simple package made for encoding and decoding content hashes has specified in the [EIP 1577](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1577.md).
+>This is a simple package made for encoding and decoding content hashes as specified in the [EIP 1577](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1577.md).
 This package will be useful for every [Ethereum](https://www.ethereum.org/) developer wanting to interact with [EIP 1577](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1577.md) compliant [ENS resolvers](http://docs.ens.domains/en/latest/introduction.html).
 
 Here you can find a [live demo](https://content-hash.surge.sh/) of this package.
