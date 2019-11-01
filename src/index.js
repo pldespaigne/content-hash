@@ -19,8 +19,14 @@
 const multiC = require('multicodec');
 
 const { hexStringToBuffer, profiles } = require('./profiles');
+const { cidV0ToV1Base32 } = require('./helpers');
 
 module.exports = {
+
+	//export some helpers functions
+	helpers: {
+		cidV0ToV1Base32,
+	},
 
 	/**
 	* Decode a Content Hash.
@@ -65,6 +71,7 @@ module.exports = {
 		const encodedValue = profile.encode(value);
 		return multiC.addPrefix(codec, encodedValue).toString('hex');
 	},
+
 	/**
 	* Extract the codec of a content hash
 	* @param {string} hash hex string containing a content hash

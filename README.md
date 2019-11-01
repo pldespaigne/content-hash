@@ -99,6 +99,18 @@ const codec = contentHash.getCodec(encoded) // 'swarm-ns'
 codec === 'ipfs-ns' // false
 ```
 
+### contentHash.helpers
+This object contain the following helpers functions :
+
+- #### cidV0ToV1Base32( ipfsHash ) -> string
+	This function takes an ipfsHash and convert it to a CID v1 encoded in base32.
+	```javascript
+	const ipfs = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG'
+
+	const cidV1 = contentHash.helpers.cidV0ToV1Base32(ipfs)
+	// 'bafybeibj6lixxzqtsb45ysdjnupvqkufgdvzqbnvmhw2kf7cfkesy7r7d4'
+	```
+
 ## 👨‍💻 Maintainer
 *  pldespaigne : [github](https://github.com/pldespaigne), [twitter](https://twitter.com/pldespaigne)
 
