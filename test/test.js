@@ -12,12 +12,12 @@ const onion = 'zqktlwi4fecvo6ri'
 const onion_contentHash = 'bc037a716b746c776934666563766f367269';
 const onion3 = 'p53lf57qovyuvwsc6xnrppyply3vtqm7l6pcobkmyqsiofyeznfu5uqd';
 const onion3_contentHash = 'bd037035336c663537716f7679757677736336786e72707079706c79337674716d376c3670636f626b6d797173696f6679657a6e667535757164';
-const ipfsBase32 = 'bafybeibj6lixxzqtsb45ysdjnupvqkufgdvzqbnvmhw2kf7cfkesy7r7d4';
+const ipfsBase32DagPb = 'bafybeibj6lixxzqtsb45ysdjnupvqkufgdvzqbnvmhw2kf7cfkesy7r7d4';
+const ipfsBase32Libp2pKey = 'bafzbeie5745rpv2m6tjyuugywy4d5ewrqgqqhfnf445he3omzpjbx5xqxe';
 
-describe('content-hash (legacy tests)', () => 
+describe('content-hash (legacy tests)', () =>
 	{
 		it('should decode a content hash', () => {
-			
 			const actual_0 = contentHash.decode(ipfs_contentHash);
 			const actual_1 = contentHash.decode(swarm_contentHash);
 			let actual_2 = contentHash.decode(onion_contentHash);
@@ -27,22 +27,18 @@ describe('content-hash (legacy tests)', () =>
 			actual_2.should.be.equal(onion);
 		});
 		it('should encode an ipfs address', () => {
-			
 			const actual = contentHash.fromIpfs(ipfs);
 			actual.should.be.equal(ipfs_contentHash);
 		});
 		it('should encode a swarm address', () => {
-			
 			const actual = contentHash.fromSwarm(swarm);
 			actual.should.be.equal(swarm_contentHash);
 		});
 		it('should encode an onion address', () => {
-			
 			const actual = contentHash.encode('onion', onion);
 			actual.should.be.equal(onion_contentHash);
 		});
 		it('should get a codec from a content hash', () => {
-			
 			const actual_0 = contentHash.getCodec(ipfs_contentHash);
 			const actual_1 = contentHash.getCodec(swarm_contentHash);
 			const actual_2 = contentHash.getCodec(onion_contentHash);
@@ -128,7 +124,13 @@ describe('content-hash', () => {
 	describe('helpers', () => {
 		it('should convert CID v0 into v1', () => {
 			const actual = contentHash.helpers.cidV0ToV1Base32(ipfs);
-			actual.should.be.equal(ipfsBase32);
+			actual.should.be.equal(ipfsBase32DagPb);
+		});
+		it('should keep CID v1 Base32 as-is', () => {
+			const dagPbCid = contentHash.helpers.cidV0ToV1Base32(ipfsBase32DagPb);
+			dagPbCid.should.be.equal(ipfsBase32DagPb);
+			const libp2pKeyCid = contentHash.helpers.cidV0ToV1Base32(ipfsBase32Libp2pKey);
+			libp2pKeyCid.should.be.equal(ipfsBase32Libp2pKey);
 		});
 	});
 });

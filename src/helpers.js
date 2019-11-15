@@ -19,14 +19,16 @@
 const CID = require('cids');
 
 /**
- * Take an ipfsHash and convert it to a CID v1 encoded in base32.
+ * Take any ipfsHash and convert it to a CID v1 encoded in base32.
  * @param {string} ipfsHash a regular ipfs hash either a cid v0 or v1 (v1 will remain unchanged)
  * @return {string} the resulting ipfs hash as a cid v1
  */
 const cidV0ToV1Base32 = (ipfsHash) => {
-	const cidV0 = new CID(ipfsHash);
-	const cidV1Base32 = new CID(1, 'dag-pb', cidV0.multihash, 'base32');
-	return cidV1Base32.toString();
+	let cid = new CID(ipfsHash);
+	if (cid.version === 0) {
+		cid = cid.toV1();
+	}
+	return cid.toString('base32');
 }
 
 exports.cidV0ToV1Base32 = cidV0ToV1Base32;
