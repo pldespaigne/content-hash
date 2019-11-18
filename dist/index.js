@@ -2161,7 +2161,7 @@ class CID {
    *   -> construct CID by parts
    * ```
    *
-   * @param {string|Buffer} version
+   * @param {string|Buffer|CID} version
    * @param {string} [codec]
    * @param {Buffer} [multihash]
    * @param {string} [multibaseName]
@@ -2174,14 +2174,15 @@ class CID {
    * new CID(<bs58 encoded multihash>)
    * new CID(<cid>)
    */
-  constructor (version, codec, multihash, multibaseName = 'base58btc') {
-    if (module.exports.isCID(version)) {
+  constructor (version, codec, multihash, multibaseName) {
+    if (_CID.isCID(version)) {
       // version is an exising CID instance
       const cid = version
       this.version = cid.version
       this.codec = cid.codec
       this.multihash = Buffer.from(cid.multihash)
-      this.multibaseName = cid.multibaseName
+      // Default guard for when a CID < 0.7 is passed with no multibaseName
+      this.multibaseName = cid.multibaseName || (cid.version === 0 ? 'base58btc' : 'base32')
       return
     }
 
@@ -2210,13 +2211,13 @@ class CID {
     if (Buffer.isBuffer(version)) {
       const firstByte = version.slice(0, 1)
       const v = parseInt(firstByte.toString('hex'), 16)
-      if (v === 0 || v === 1) {
+      if (v === 1) {
         // version is a CID buffer
         const cid = version
         this.version = v
         this.codec = multicodec.getCodec(cid.slice(1))
         this.multihash = multicodec.rmPrefix(cid.slice(1))
-        this.multibaseName = (v === 0) ? 'base58btc' : multibaseName
+        this.multibaseName = 'base32'
       } else {
         // version is a raw multihash buffer, so v0
         this.version = 0
@@ -2248,7 +2249,7 @@ class CID {
     /**
      * @type {string}
      */
-    this.multibaseName = multibaseName
+    this.multibaseName = multibaseName || (version === 0 ? 'base58btc' : 'base32')
 
     CID.validateCID(this)
   }
@@ -5929,11 +5930,50 @@ module.exports = function (value) {
 	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
+const CID = require('cids');
+
+/**
+ * Take an ipfsHash and convert it to a CID v1 encoded in base32.
+ * @param {string} ipfsHash a regular ipfs hash either a cid v0 or v1 (v1 will remain unchanged)
+ * @return {string} the resulting ipfs hash as a cid v1
+ */
+const cidV0ToV1Base32 = (ipfsHash) => {
+	const cidV0 = new CID(ipfsHash);
+	const cidV1Base32 = new CID(1, 'dag-pb', cidV0.multihash, 'base32');
+	return cidV1Base32.toString();
+}
+
+exports.cidV0ToV1Base32 = cidV0ToV1Base32;
+},{"cids":6}],31:[function(require,module,exports){
+/*
+	ISC License
+
+	Copyright (c) 2019, Pierre-Louis Despaigne
+
+	Permission to use, copy, modify, and/or distribute this software for any
+	purpose with or without fee is hereby granted, provided that the above
+	copyright notice and this permission notice appear in all copies.
+
+	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+	WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+	MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+	ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+	WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+	ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+	OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+*/
+
 const multiC = require('multicodec');
 
 const { hexStringToBuffer, profiles } = require('./profiles');
+const { cidV0ToV1Base32 } = require('./helpers');
 
 module.exports = {
+
+	//export some helpers functions
+	helpers: {
+		cidV0ToV1Base32,
+	},
 
 	/**
 	* Decode a Content Hash.
@@ -5978,6 +6018,7 @@ module.exports = {
 		const encodedValue = profile.encode(value);
 		return multiC.addPrefix(codec, encodedValue).toString('hex');
 	},
+
 	/**
 	* Extract the codec of a content hash
 	* @param {string} hash hex string containing a content hash
@@ -5989,7 +6030,7 @@ module.exports = {
 	},
 }
 
-},{"./profiles":31,"multicodec":18}],31:[function(require,module,exports){
+},{"./helpers":30,"./profiles":32,"multicodec":18}],32:[function(require,module,exports){
 (function (Buffer){
 /*
 	ISC License
@@ -6112,5 +6153,5 @@ const profiles = {
 exports.hexStringToBuffer = hexStringToBuffer;
 exports.profiles = profiles;
 }).call(this,require("buffer").Buffer)
-},{"buffer":4,"cids":6,"multihashes":24}]},{},[30])(30)
+},{"buffer":4,"cids":6,"multihashes":24}]},{},[31])(31)
 });
