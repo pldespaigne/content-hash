@@ -1,98 +1,129 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.contentHash = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
-// base-x encoding
-// Forked from https://github.com/cryptocoinjs/bs58
-// Originally written by Mike Hearn for BitcoinJ
-// Copyright (c) 2011 Google Inc
-// Ported to JavaScript by Stefan Thomas
-// Merged Buffer refactorings from base58-native by Stephen Pair
-// Copyright (c) 2013 BitPay Inc
-
-var Buffer = require('safe-buffer').Buffer
-
-module.exports = function base (ALPHABET) {
-  var ALPHABET_MAP = {}
+'use strict'
+// base-x encoding / decoding
+// Copyright (c) 2018 base-x contributors
+// Copyright (c) 2014-2018 The Bitcoin Core developers (base58.cpp)
+// Distributed under the MIT software license, see the accompanying
+// file LICENSE or http://www.opensource.org/licenses/mit-license.php.
+// @ts-ignore
+var _Buffer = require('safe-buffer').Buffer
+function base (ALPHABET) {
+  if (ALPHABET.length >= 255) { throw new TypeError('Alphabet too long') }
+  var BASE_MAP = new Uint8Array(256)
+  for (var j = 0; j < BASE_MAP.length; j++) {
+    BASE_MAP[j] = 255
+  }
+  for (var i = 0; i < ALPHABET.length; i++) {
+    var x = ALPHABET.charAt(i)
+    var xc = x.charCodeAt(0)
+    if (BASE_MAP[xc] !== 255) { throw new TypeError(x + ' is ambiguous') }
+    BASE_MAP[xc] = i
+  }
   var BASE = ALPHABET.length
   var LEADER = ALPHABET.charAt(0)
-
-  // pre-compute lookup table
-  for (var z = 0; z < ALPHABET.length; z++) {
-    var x = ALPHABET.charAt(z)
-
-    if (ALPHABET_MAP[x] !== undefined) throw new TypeError(x + ' is ambiguous')
-    ALPHABET_MAP[x] = z
-  }
-
+  var FACTOR = Math.log(BASE) / Math.log(256) // log(BASE) / log(256), rounded up
+  var iFACTOR = Math.log(256) / Math.log(BASE) // log(256) / log(BASE), rounded up
   function encode (source) {
-    if (source.length === 0) return ''
-
-    var digits = [0]
-    for (var i = 0; i < source.length; ++i) {
-      for (var j = 0, carry = source[i]; j < digits.length; ++j) {
-        carry += digits[j] << 8
-        digits[j] = carry % BASE
-        carry = (carry / BASE) | 0
-      }
-
-      while (carry > 0) {
-        digits.push(carry % BASE)
-        carry = (carry / BASE) | 0
-      }
+    if (Array.isArray(source) || source instanceof Uint8Array) { source = _Buffer.from(source) }
+    if (!_Buffer.isBuffer(source)) { throw new TypeError('Expected Buffer') }
+    if (source.length === 0) { return '' }
+        // Skip & count leading zeroes.
+    var zeroes = 0
+    var length = 0
+    var pbegin = 0
+    var pend = source.length
+    while (pbegin !== pend && source[pbegin] === 0) {
+      pbegin++
+      zeroes++
     }
-
-    var string = ''
-
-    // deal with leading zeros
-    for (var k = 0; source[k] === 0 && k < source.length - 1; ++k) string += LEADER
-    // convert digits to a string
-    for (var q = digits.length - 1; q >= 0; --q) string += ALPHABET[digits[q]]
-
-    return string
+        // Allocate enough space in big-endian base58 representation.
+    var size = ((pend - pbegin) * iFACTOR + 1) >>> 0
+    var b58 = new Uint8Array(size)
+        // Process the bytes.
+    while (pbegin !== pend) {
+      var carry = source[pbegin]
+            // Apply "b58 = b58 * 256 + ch".
+      var i = 0
+      for (var it1 = size - 1; (carry !== 0 || i < length) && (it1 !== -1); it1--, i++) {
+        carry += (256 * b58[it1]) >>> 0
+        b58[it1] = (carry % BASE) >>> 0
+        carry = (carry / BASE) >>> 0
+      }
+      if (carry !== 0) { throw new Error('Non-zero carry') }
+      length = i
+      pbegin++
+    }
+        // Skip leading zeroes in base58 result.
+    var it2 = size - length
+    while (it2 !== size && b58[it2] === 0) {
+      it2++
+    }
+        // Translate the result into a string.
+    var str = LEADER.repeat(zeroes)
+    for (; it2 < size; ++it2) { str += ALPHABET.charAt(b58[it2]) }
+    return str
   }
-
-  function decodeUnsafe (string) {
-    if (typeof string !== 'string') throw new TypeError('Expected String')
-    if (string.length === 0) return Buffer.allocUnsafe(0)
-
-    var bytes = [0]
-    for (var i = 0; i < string.length; i++) {
-      var value = ALPHABET_MAP[string[i]]
-      if (value === undefined) return
-
-      for (var j = 0, carry = value; j < bytes.length; ++j) {
-        carry += bytes[j] * BASE
-        bytes[j] = carry & 0xff
-        carry >>= 8
-      }
-
-      while (carry > 0) {
-        bytes.push(carry & 0xff)
-        carry >>= 8
-      }
+  function decodeUnsafe (source) {
+    if (typeof source !== 'string') { throw new TypeError('Expected String') }
+    if (source.length === 0) { return _Buffer.alloc(0) }
+    var psz = 0
+        // Skip leading spaces.
+    if (source[psz] === ' ') { return }
+        // Skip and count leading '1's.
+    var zeroes = 0
+    var length = 0
+    while (source[psz] === LEADER) {
+      zeroes++
+      psz++
     }
-
-    // deal with leading zeros
-    for (var k = 0; string[k] === LEADER && k < string.length - 1; ++k) {
-      bytes.push(0)
+        // Allocate enough space in big-endian base256 representation.
+    var size = (((source.length - psz) * FACTOR) + 1) >>> 0 // log(58) / log(256), rounded up.
+    var b256 = new Uint8Array(size)
+        // Process the characters.
+    while (source[psz]) {
+            // Decode character
+      var carry = BASE_MAP[source.charCodeAt(psz)]
+            // Invalid character
+      if (carry === 255) { return }
+      var i = 0
+      for (var it3 = size - 1; (carry !== 0 || i < length) && (it3 !== -1); it3--, i++) {
+        carry += (BASE * b256[it3]) >>> 0
+        b256[it3] = (carry % 256) >>> 0
+        carry = (carry / 256) >>> 0
+      }
+      if (carry !== 0) { throw new Error('Non-zero carry') }
+      length = i
+      psz++
     }
-
-    return Buffer.from(bytes.reverse())
+        // Skip trailing spaces.
+    if (source[psz] === ' ') { return }
+        // Skip leading zeroes in b256.
+    var it4 = size - length
+    while (it4 !== size && b256[it4] === 0) {
+      it4++
+    }
+    var vch = _Buffer.allocUnsafe(zeroes + (size - it4))
+    vch.fill(0x00, 0, zeroes)
+    var j = zeroes
+    while (it4 !== size) {
+      vch[j++] = b256[it4++]
+    }
+    return vch
   }
-
   function decode (string) {
     var buffer = decodeUnsafe(string)
-    if (buffer) return buffer
-
+    if (buffer) { return buffer }
     throw new Error('Non-base' + BASE + ' character')
   }
-
   return {
     encode: encode,
     decodeUnsafe: decodeUnsafe,
     decode: decode
   }
 }
+module.exports = base
 
-},{"safe-buffer":25}],2:[function(require,module,exports){
+},{"safe-buffer":36}],2:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -247,12 +278,6 @@ function fromByteArray (uint8) {
 }
 
 },{}],3:[function(require,module,exports){
-var basex = require('base-x')
-var ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-
-module.exports = basex(ALPHABET)
-
-},{"base-x":1}],4:[function(require,module,exports){
 (function (Buffer){
 /*!
  * The buffer module from node.js, for the browser.
@@ -2055,12 +2080,1275 @@ var hexSliceLookupTable = (function () {
 })()
 
 }).call(this,require("buffer").Buffer)
-},{"base64-js":2,"buffer":4,"ieee754":8}],5:[function(require,module,exports){
-(function (Buffer){
+},{"base64-js":2,"buffer":3,"ieee754":16}],4:[function(require,module,exports){
+module.exports={
+  "identity": 0,
+  "ip4": 4,
+  "tcp": 6,
+  "sha1": 17,
+  "sha2-256": 18,
+  "sha2-512": 19,
+  "sha3-512": 20,
+  "sha3-384": 21,
+  "sha3-256": 22,
+  "sha3-224": 23,
+  "shake-128": 24,
+  "shake-256": 25,
+  "keccak-224": 26,
+  "keccak-256": 27,
+  "keccak-384": 28,
+  "keccak-512": 29,
+  "blake3": 30,
+  "dccp": 33,
+  "murmur3-128": 34,
+  "murmur3-32": 35,
+  "ip6": 41,
+  "ip6zone": 42,
+  "path": 47,
+  "multicodec": 48,
+  "multihash": 49,
+  "multiaddr": 50,
+  "multibase": 51,
+  "dns": 53,
+  "dns4": 54,
+  "dns6": 55,
+  "dnsaddr": 56,
+  "protobuf": 80,
+  "cbor": 81,
+  "raw": 85,
+  "dbl-sha2-256": 86,
+  "rlp": 96,
+  "bencode": 99,
+  "dag-pb": 112,
+  "dag-cbor": 113,
+  "libp2p-key": 114,
+  "git-raw": 120,
+  "torrent-info": 123,
+  "torrent-file": 124,
+  "leofcoin-block": 129,
+  "leofcoin-tx": 130,
+  "leofcoin-pr": 131,
+  "sctp": 132,
+  "dag-jose": 133,
+  "dag-cose": 134,
+  "eth-block": 144,
+  "eth-block-list": 145,
+  "eth-tx-trie": 146,
+  "eth-tx": 147,
+  "eth-tx-receipt-trie": 148,
+  "eth-tx-receipt": 149,
+  "eth-state-trie": 150,
+  "eth-account-snapshot": 151,
+  "eth-storage-trie": 152,
+  "bitcoin-block": 176,
+  "bitcoin-tx": 177,
+  "bitcoin-witness-commitment": 178,
+  "zcash-block": 192,
+  "zcash-tx": 193,
+  "stellar-block": 208,
+  "stellar-tx": 209,
+  "md4": 212,
+  "md5": 213,
+  "bmt": 214,
+  "decred-block": 224,
+  "decred-tx": 225,
+  "ipld-ns": 226,
+  "ipfs-ns": 227,
+  "swarm-ns": 228,
+  "ipns-ns": 229,
+  "zeronet": 230,
+  "secp256k1-pub": 231,
+  "bls12_381-g1-pub": 234,
+  "bls12_381-g2-pub": 235,
+  "x25519-pub": 236,
+  "ed25519-pub": 237,
+  "dash-block": 240,
+  "dash-tx": 241,
+  "swarm-manifest": 250,
+  "swarm-feed": 251,
+  "udp": 273,
+  "p2p-webrtc-star": 275,
+  "p2p-webrtc-direct": 276,
+  "p2p-stardust": 277,
+  "p2p-circuit": 290,
+  "dag-json": 297,
+  "udt": 301,
+  "utp": 302,
+  "unix": 400,
+  "p2p": 421,
+  "ipfs": 421,
+  "https": 443,
+  "onion": 444,
+  "onion3": 445,
+  "garlic64": 446,
+  "garlic32": 447,
+  "tls": 448,
+  "quic": 460,
+  "ws": 477,
+  "wss": 478,
+  "p2p-websocket-star": 479,
+  "http": 480,
+  "json": 512,
+  "messagepack": 513,
+  "libp2p-peer-record": 769,
+  "sha2-256-trunc254-padded": 4114,
+  "ripemd-128": 4178,
+  "ripemd-160": 4179,
+  "ripemd-256": 4180,
+  "ripemd-320": 4181,
+  "x11": 4352,
+  "sm3-256": 21325,
+  "blake2b-8": 45569,
+  "blake2b-16": 45570,
+  "blake2b-24": 45571,
+  "blake2b-32": 45572,
+  "blake2b-40": 45573,
+  "blake2b-48": 45574,
+  "blake2b-56": 45575,
+  "blake2b-64": 45576,
+  "blake2b-72": 45577,
+  "blake2b-80": 45578,
+  "blake2b-88": 45579,
+  "blake2b-96": 45580,
+  "blake2b-104": 45581,
+  "blake2b-112": 45582,
+  "blake2b-120": 45583,
+  "blake2b-128": 45584,
+  "blake2b-136": 45585,
+  "blake2b-144": 45586,
+  "blake2b-152": 45587,
+  "blake2b-160": 45588,
+  "blake2b-168": 45589,
+  "blake2b-176": 45590,
+  "blake2b-184": 45591,
+  "blake2b-192": 45592,
+  "blake2b-200": 45593,
+  "blake2b-208": 45594,
+  "blake2b-216": 45595,
+  "blake2b-224": 45596,
+  "blake2b-232": 45597,
+  "blake2b-240": 45598,
+  "blake2b-248": 45599,
+  "blake2b-256": 45600,
+  "blake2b-264": 45601,
+  "blake2b-272": 45602,
+  "blake2b-280": 45603,
+  "blake2b-288": 45604,
+  "blake2b-296": 45605,
+  "blake2b-304": 45606,
+  "blake2b-312": 45607,
+  "blake2b-320": 45608,
+  "blake2b-328": 45609,
+  "blake2b-336": 45610,
+  "blake2b-344": 45611,
+  "blake2b-352": 45612,
+  "blake2b-360": 45613,
+  "blake2b-368": 45614,
+  "blake2b-376": 45615,
+  "blake2b-384": 45616,
+  "blake2b-392": 45617,
+  "blake2b-400": 45618,
+  "blake2b-408": 45619,
+  "blake2b-416": 45620,
+  "blake2b-424": 45621,
+  "blake2b-432": 45622,
+  "blake2b-440": 45623,
+  "blake2b-448": 45624,
+  "blake2b-456": 45625,
+  "blake2b-464": 45626,
+  "blake2b-472": 45627,
+  "blake2b-480": 45628,
+  "blake2b-488": 45629,
+  "blake2b-496": 45630,
+  "blake2b-504": 45631,
+  "blake2b-512": 45632,
+  "blake2s-8": 45633,
+  "blake2s-16": 45634,
+  "blake2s-24": 45635,
+  "blake2s-32": 45636,
+  "blake2s-40": 45637,
+  "blake2s-48": 45638,
+  "blake2s-56": 45639,
+  "blake2s-64": 45640,
+  "blake2s-72": 45641,
+  "blake2s-80": 45642,
+  "blake2s-88": 45643,
+  "blake2s-96": 45644,
+  "blake2s-104": 45645,
+  "blake2s-112": 45646,
+  "blake2s-120": 45647,
+  "blake2s-128": 45648,
+  "blake2s-136": 45649,
+  "blake2s-144": 45650,
+  "blake2s-152": 45651,
+  "blake2s-160": 45652,
+  "blake2s-168": 45653,
+  "blake2s-176": 45654,
+  "blake2s-184": 45655,
+  "blake2s-192": 45656,
+  "blake2s-200": 45657,
+  "blake2s-208": 45658,
+  "blake2s-216": 45659,
+  "blake2s-224": 45660,
+  "blake2s-232": 45661,
+  "blake2s-240": 45662,
+  "blake2s-248": 45663,
+  "blake2s-256": 45664,
+  "skein256-8": 45825,
+  "skein256-16": 45826,
+  "skein256-24": 45827,
+  "skein256-32": 45828,
+  "skein256-40": 45829,
+  "skein256-48": 45830,
+  "skein256-56": 45831,
+  "skein256-64": 45832,
+  "skein256-72": 45833,
+  "skein256-80": 45834,
+  "skein256-88": 45835,
+  "skein256-96": 45836,
+  "skein256-104": 45837,
+  "skein256-112": 45838,
+  "skein256-120": 45839,
+  "skein256-128": 45840,
+  "skein256-136": 45841,
+  "skein256-144": 45842,
+  "skein256-152": 45843,
+  "skein256-160": 45844,
+  "skein256-168": 45845,
+  "skein256-176": 45846,
+  "skein256-184": 45847,
+  "skein256-192": 45848,
+  "skein256-200": 45849,
+  "skein256-208": 45850,
+  "skein256-216": 45851,
+  "skein256-224": 45852,
+  "skein256-232": 45853,
+  "skein256-240": 45854,
+  "skein256-248": 45855,
+  "skein256-256": 45856,
+  "skein512-8": 45857,
+  "skein512-16": 45858,
+  "skein512-24": 45859,
+  "skein512-32": 45860,
+  "skein512-40": 45861,
+  "skein512-48": 45862,
+  "skein512-56": 45863,
+  "skein512-64": 45864,
+  "skein512-72": 45865,
+  "skein512-80": 45866,
+  "skein512-88": 45867,
+  "skein512-96": 45868,
+  "skein512-104": 45869,
+  "skein512-112": 45870,
+  "skein512-120": 45871,
+  "skein512-128": 45872,
+  "skein512-136": 45873,
+  "skein512-144": 45874,
+  "skein512-152": 45875,
+  "skein512-160": 45876,
+  "skein512-168": 45877,
+  "skein512-176": 45878,
+  "skein512-184": 45879,
+  "skein512-192": 45880,
+  "skein512-200": 45881,
+  "skein512-208": 45882,
+  "skein512-216": 45883,
+  "skein512-224": 45884,
+  "skein512-232": 45885,
+  "skein512-240": 45886,
+  "skein512-248": 45887,
+  "skein512-256": 45888,
+  "skein512-264": 45889,
+  "skein512-272": 45890,
+  "skein512-280": 45891,
+  "skein512-288": 45892,
+  "skein512-296": 45893,
+  "skein512-304": 45894,
+  "skein512-312": 45895,
+  "skein512-320": 45896,
+  "skein512-328": 45897,
+  "skein512-336": 45898,
+  "skein512-344": 45899,
+  "skein512-352": 45900,
+  "skein512-360": 45901,
+  "skein512-368": 45902,
+  "skein512-376": 45903,
+  "skein512-384": 45904,
+  "skein512-392": 45905,
+  "skein512-400": 45906,
+  "skein512-408": 45907,
+  "skein512-416": 45908,
+  "skein512-424": 45909,
+  "skein512-432": 45910,
+  "skein512-440": 45911,
+  "skein512-448": 45912,
+  "skein512-456": 45913,
+  "skein512-464": 45914,
+  "skein512-472": 45915,
+  "skein512-480": 45916,
+  "skein512-488": 45917,
+  "skein512-496": 45918,
+  "skein512-504": 45919,
+  "skein512-512": 45920,
+  "skein1024-8": 45921,
+  "skein1024-16": 45922,
+  "skein1024-24": 45923,
+  "skein1024-32": 45924,
+  "skein1024-40": 45925,
+  "skein1024-48": 45926,
+  "skein1024-56": 45927,
+  "skein1024-64": 45928,
+  "skein1024-72": 45929,
+  "skein1024-80": 45930,
+  "skein1024-88": 45931,
+  "skein1024-96": 45932,
+  "skein1024-104": 45933,
+  "skein1024-112": 45934,
+  "skein1024-120": 45935,
+  "skein1024-128": 45936,
+  "skein1024-136": 45937,
+  "skein1024-144": 45938,
+  "skein1024-152": 45939,
+  "skein1024-160": 45940,
+  "skein1024-168": 45941,
+  "skein1024-176": 45942,
+  "skein1024-184": 45943,
+  "skein1024-192": 45944,
+  "skein1024-200": 45945,
+  "skein1024-208": 45946,
+  "skein1024-216": 45947,
+  "skein1024-224": 45948,
+  "skein1024-232": 45949,
+  "skein1024-240": 45950,
+  "skein1024-248": 45951,
+  "skein1024-256": 45952,
+  "skein1024-264": 45953,
+  "skein1024-272": 45954,
+  "skein1024-280": 45955,
+  "skein1024-288": 45956,
+  "skein1024-296": 45957,
+  "skein1024-304": 45958,
+  "skein1024-312": 45959,
+  "skein1024-320": 45960,
+  "skein1024-328": 45961,
+  "skein1024-336": 45962,
+  "skein1024-344": 45963,
+  "skein1024-352": 45964,
+  "skein1024-360": 45965,
+  "skein1024-368": 45966,
+  "skein1024-376": 45967,
+  "skein1024-384": 45968,
+  "skein1024-392": 45969,
+  "skein1024-400": 45970,
+  "skein1024-408": 45971,
+  "skein1024-416": 45972,
+  "skein1024-424": 45973,
+  "skein1024-432": 45974,
+  "skein1024-440": 45975,
+  "skein1024-448": 45976,
+  "skein1024-456": 45977,
+  "skein1024-464": 45978,
+  "skein1024-472": 45979,
+  "skein1024-480": 45980,
+  "skein1024-488": 45981,
+  "skein1024-496": 45982,
+  "skein1024-504": 45983,
+  "skein1024-512": 45984,
+  "skein1024-520": 45985,
+  "skein1024-528": 45986,
+  "skein1024-536": 45987,
+  "skein1024-544": 45988,
+  "skein1024-552": 45989,
+  "skein1024-560": 45990,
+  "skein1024-568": 45991,
+  "skein1024-576": 45992,
+  "skein1024-584": 45993,
+  "skein1024-592": 45994,
+  "skein1024-600": 45995,
+  "skein1024-608": 45996,
+  "skein1024-616": 45997,
+  "skein1024-624": 45998,
+  "skein1024-632": 45999,
+  "skein1024-640": 46000,
+  "skein1024-648": 46001,
+  "skein1024-656": 46002,
+  "skein1024-664": 46003,
+  "skein1024-672": 46004,
+  "skein1024-680": 46005,
+  "skein1024-688": 46006,
+  "skein1024-696": 46007,
+  "skein1024-704": 46008,
+  "skein1024-712": 46009,
+  "skein1024-720": 46010,
+  "skein1024-728": 46011,
+  "skein1024-736": 46012,
+  "skein1024-744": 46013,
+  "skein1024-752": 46014,
+  "skein1024-760": 46015,
+  "skein1024-768": 46016,
+  "skein1024-776": 46017,
+  "skein1024-784": 46018,
+  "skein1024-792": 46019,
+  "skein1024-800": 46020,
+  "skein1024-808": 46021,
+  "skein1024-816": 46022,
+  "skein1024-824": 46023,
+  "skein1024-832": 46024,
+  "skein1024-840": 46025,
+  "skein1024-848": 46026,
+  "skein1024-856": 46027,
+  "skein1024-864": 46028,
+  "skein1024-872": 46029,
+  "skein1024-880": 46030,
+  "skein1024-888": 46031,
+  "skein1024-896": 46032,
+  "skein1024-904": 46033,
+  "skein1024-912": 46034,
+  "skein1024-920": 46035,
+  "skein1024-928": 46036,
+  "skein1024-936": 46037,
+  "skein1024-944": 46038,
+  "skein1024-952": 46039,
+  "skein1024-960": 46040,
+  "skein1024-968": 46041,
+  "skein1024-976": 46042,
+  "skein1024-984": 46043,
+  "skein1024-992": 46044,
+  "skein1024-1000": 46045,
+  "skein1024-1008": 46046,
+  "skein1024-1016": 46047,
+  "skein1024-1024": 46048,
+  "poseidon-bls12_381-a2-fc1": 46081,
+  "poseidon-bls12_381-a2-fc1-sc": 46082,
+  "zeroxcert-imprint-256": 52753,
+  "fil-commitment-unsealed": 61697,
+  "fil-commitment-sealed": 61698,
+  "holochain-adr-v0": 8417572,
+  "holochain-adr-v1": 8483108,
+  "holochain-key-v0": 9728292,
+  "holochain-key-v1": 9793828,
+  "holochain-sig-v0": 10645796,
+  "holochain-sig-v1": 10711332
+}
+},{}],5:[function(require,module,exports){
+'use strict'
+
+const table = require('./base-table.json')
+
+// map for codecConstant -> code
+const constants = {}
+
+for (const [name, code] of Object.entries(table)) {
+  constants[name.toUpperCase().replace(/-/g, '_')] = code
+}
+
+module.exports = Object.freeze(constants)
+
+},{"./base-table.json":4}],6:[function(require,module,exports){
+/**
+ * Implementation of the multicodec specification.
+ *
+ * @module multicodec
+ * @example
+ * const multicodec = require('multicodec')
+ *
+ * const prefixedProtobuf = multicodec.addPrefix('protobuf', protobufBuffer)
+ * // prefixedProtobuf 0x50...
+ *
+ */
+'use strict'
+
+const { Buffer } = require('buffer')
+const varint = require('varint')
+const intTable = require('./int-table')
+const codecNameToCodeVarint = require('./varint-table')
+const util = require('./util')
+
+exports = module.exports
+
+/**
+ * Prefix a buffer with a multicodec-packed.
+ *
+ * @param {string|number} multicodecStrOrCode
+ * @param {Buffer} data
+ * @returns {Buffer}
+ */
+exports.addPrefix = (multicodecStrOrCode, data) => {
+  let prefix
+
+  if (Buffer.isBuffer(multicodecStrOrCode)) {
+    prefix = util.varintBufferEncode(multicodecStrOrCode)
+  } else {
+    if (codecNameToCodeVarint[multicodecStrOrCode]) {
+      prefix = codecNameToCodeVarint[multicodecStrOrCode]
+    } else {
+      throw new Error('multicodec not recognized')
+    }
+  }
+  return Buffer.concat([prefix, data])
+}
+
+/**
+ * Decapsulate the multicodec-packed prefix from the data.
+ *
+ * @param {Buffer} data
+ * @returns {Buffer}
+ */
+exports.rmPrefix = (data) => {
+  varint.decode(data)
+  return data.slice(varint.decode.bytes)
+}
+
+/**
+ * Get the codec of the prefixed data.
+ * @param {Buffer} prefixedData
+ * @returns {string}
+ */
+exports.getCodec = (prefixedData) => {
+  const code = varint.decode(prefixedData)
+  const codecName = intTable.get(code)
+  if (codecName === undefined) {
+    throw new Error(`Code ${code} not found`)
+  }
+  return codecName
+}
+
+/**
+ * Get the name of the codec.
+ * @param {number} codec
+ * @returns {string}
+ */
+exports.getName = (codec) => {
+  return intTable.get(codec)
+}
+
+/**
+ * Get the code of the codec
+ * @param {string} name
+ * @returns {number}
+ */
+exports.getNumber = (name) => {
+  const code = codecNameToCodeVarint[name]
+  if (code === undefined) {
+    throw new Error('Codec `' + name + '` not found')
+  }
+  return util.varintBufferDecode(code)[0]
+}
+
+/**
+ * Get the code of the prefixed data.
+ * @param {Buffer} prefixedData
+ * @returns {number}
+ */
+exports.getCode = (prefixedData) => {
+  return varint.decode(prefixedData)
+}
+
+/**
+ * Get the code as varint of a codec name.
+ * @param {string} codecName
+ * @returns {Buffer}
+ */
+exports.getCodeVarint = (codecName) => {
+  const code = codecNameToCodeVarint[codecName]
+  if (code === undefined) {
+    throw new Error('Codec `' + codecName + '` not found')
+  }
+  return code
+}
+
+/**
+ * Get the varint of a code.
+ * @param {Number} code
+ * @returns {Array.<number>}
+ */
+exports.getVarint = (code) => {
+  return varint.encode(code)
+}
+
+// Make the constants top-level constants
+const constants = require('./constants')
+Object.assign(exports, constants)
+
+// Human friendly names for printing, e.g. in error messages
+exports.print = require('./print')
+
+},{"./constants":5,"./int-table":7,"./print":8,"./util":9,"./varint-table":10,"buffer":3,"varint":39}],7:[function(require,module,exports){
+'use strict'
+const baseTable = require('./base-table.json')
+
+// map for hexString -> codecName
+const nameTable = new Map()
+
+for (const encodingName in baseTable) {
+  const code = baseTable[encodingName]
+  nameTable.set(code, encodingName)
+}
+
+module.exports = Object.freeze(nameTable)
+
+},{"./base-table.json":4}],8:[function(require,module,exports){
+'use strict'
+
+const table = require('./base-table.json')
+
+// map for code -> print friendly name
+const tableByCode = {}
+
+for (const [name, code] of Object.entries(table)) {
+  if (tableByCode[code] === undefined) tableByCode[code] = name
+}
+
+module.exports = Object.freeze(tableByCode)
+
+},{"./base-table.json":4}],9:[function(require,module,exports){
+'use strict'
+const varint = require('varint')
+const { Buffer } = require('buffer')
+
+module.exports = {
+  numberToBuffer,
+  bufferToNumber,
+  varintBufferEncode,
+  varintBufferDecode,
+  varintEncode
+}
+
+function bufferToNumber (buf) {
+  return parseInt(buf.toString('hex'), 16)
+}
+
+function numberToBuffer (num) {
+  let hexString = num.toString(16)
+  if (hexString.length % 2 === 1) {
+    hexString = '0' + hexString
+  }
+  return Buffer.from(hexString, 'hex')
+}
+
+function varintBufferEncode (input) {
+  return Buffer.from(varint.encode(bufferToNumber(input)))
+}
+
+function varintBufferDecode (input) {
+  return numberToBuffer(varint.decode(input))
+}
+
+function varintEncode (num) {
+  return Buffer.from(varint.encode(num))
+}
+
+},{"buffer":3,"varint":39}],10:[function(require,module,exports){
+'use strict'
+
+const baseTable = require('./base-table.json')
+const varintEncode = require('./util').varintEncode
+
+// map for codecName -> codeVarintBuffer
+const varintTable = {}
+
+for (const encodingName in baseTable) {
+  const code = baseTable[encodingName]
+  varintTable[encodingName] = varintEncode(code)
+}
+
+module.exports = Object.freeze(varintTable)
+
+},{"./base-table.json":4,"./util":9}],11:[function(require,module,exports){
+/* eslint quote-props: off */
+'use strict'
+
+const names = Object.freeze({
+  'identity': 0x00,
+  'sha1': 0x11,
+  'sha2-256': 0x12,
+  'sha2-512': 0x13,
+  'sha3-512': 0x14,
+  'sha3-384': 0x15,
+  'sha3-256': 0x16,
+  'sha3-224': 0x17,
+  'shake-128': 0x18,
+  'shake-256': 0x19,
+  'keccak-224': 0x1a,
+  'keccak-256': 0x1b,
+  'keccak-384': 0x1c,
+  'keccak-512': 0x1d,
+  'blake3': 0x1e,
+  'murmur3-128': 0x22,
+  'murmur3-32': 0x23,
+  'dbl-sha2-256': 0x56,
+  'md4': 0xd4,
+  'md5': 0xd5,
+  'bmt': 0xd6,
+  'sha2-256-trunc254-padded': 0x1012,
+  'ripemd-128': 0x1052,
+  'ripemd-160': 0x1053,
+  'ripemd-256': 0x1054,
+  'ripemd-320': 0x1055,
+  'x11': 0x1100,
+  'sm3-256': 0x534d,
+  'blake2b-8': 0xb201,
+  'blake2b-16': 0xb202,
+  'blake2b-24': 0xb203,
+  'blake2b-32': 0xb204,
+  'blake2b-40': 0xb205,
+  'blake2b-48': 0xb206,
+  'blake2b-56': 0xb207,
+  'blake2b-64': 0xb208,
+  'blake2b-72': 0xb209,
+  'blake2b-80': 0xb20a,
+  'blake2b-88': 0xb20b,
+  'blake2b-96': 0xb20c,
+  'blake2b-104': 0xb20d,
+  'blake2b-112': 0xb20e,
+  'blake2b-120': 0xb20f,
+  'blake2b-128': 0xb210,
+  'blake2b-136': 0xb211,
+  'blake2b-144': 0xb212,
+  'blake2b-152': 0xb213,
+  'blake2b-160': 0xb214,
+  'blake2b-168': 0xb215,
+  'blake2b-176': 0xb216,
+  'blake2b-184': 0xb217,
+  'blake2b-192': 0xb218,
+  'blake2b-200': 0xb219,
+  'blake2b-208': 0xb21a,
+  'blake2b-216': 0xb21b,
+  'blake2b-224': 0xb21c,
+  'blake2b-232': 0xb21d,
+  'blake2b-240': 0xb21e,
+  'blake2b-248': 0xb21f,
+  'blake2b-256': 0xb220,
+  'blake2b-264': 0xb221,
+  'blake2b-272': 0xb222,
+  'blake2b-280': 0xb223,
+  'blake2b-288': 0xb224,
+  'blake2b-296': 0xb225,
+  'blake2b-304': 0xb226,
+  'blake2b-312': 0xb227,
+  'blake2b-320': 0xb228,
+  'blake2b-328': 0xb229,
+  'blake2b-336': 0xb22a,
+  'blake2b-344': 0xb22b,
+  'blake2b-352': 0xb22c,
+  'blake2b-360': 0xb22d,
+  'blake2b-368': 0xb22e,
+  'blake2b-376': 0xb22f,
+  'blake2b-384': 0xb230,
+  'blake2b-392': 0xb231,
+  'blake2b-400': 0xb232,
+  'blake2b-408': 0xb233,
+  'blake2b-416': 0xb234,
+  'blake2b-424': 0xb235,
+  'blake2b-432': 0xb236,
+  'blake2b-440': 0xb237,
+  'blake2b-448': 0xb238,
+  'blake2b-456': 0xb239,
+  'blake2b-464': 0xb23a,
+  'blake2b-472': 0xb23b,
+  'blake2b-480': 0xb23c,
+  'blake2b-488': 0xb23d,
+  'blake2b-496': 0xb23e,
+  'blake2b-504': 0xb23f,
+  'blake2b-512': 0xb240,
+  'blake2s-8': 0xb241,
+  'blake2s-16': 0xb242,
+  'blake2s-24': 0xb243,
+  'blake2s-32': 0xb244,
+  'blake2s-40': 0xb245,
+  'blake2s-48': 0xb246,
+  'blake2s-56': 0xb247,
+  'blake2s-64': 0xb248,
+  'blake2s-72': 0xb249,
+  'blake2s-80': 0xb24a,
+  'blake2s-88': 0xb24b,
+  'blake2s-96': 0xb24c,
+  'blake2s-104': 0xb24d,
+  'blake2s-112': 0xb24e,
+  'blake2s-120': 0xb24f,
+  'blake2s-128': 0xb250,
+  'blake2s-136': 0xb251,
+  'blake2s-144': 0xb252,
+  'blake2s-152': 0xb253,
+  'blake2s-160': 0xb254,
+  'blake2s-168': 0xb255,
+  'blake2s-176': 0xb256,
+  'blake2s-184': 0xb257,
+  'blake2s-192': 0xb258,
+  'blake2s-200': 0xb259,
+  'blake2s-208': 0xb25a,
+  'blake2s-216': 0xb25b,
+  'blake2s-224': 0xb25c,
+  'blake2s-232': 0xb25d,
+  'blake2s-240': 0xb25e,
+  'blake2s-248': 0xb25f,
+  'blake2s-256': 0xb260,
+  'skein256-8': 0xb301,
+  'skein256-16': 0xb302,
+  'skein256-24': 0xb303,
+  'skein256-32': 0xb304,
+  'skein256-40': 0xb305,
+  'skein256-48': 0xb306,
+  'skein256-56': 0xb307,
+  'skein256-64': 0xb308,
+  'skein256-72': 0xb309,
+  'skein256-80': 0xb30a,
+  'skein256-88': 0xb30b,
+  'skein256-96': 0xb30c,
+  'skein256-104': 0xb30d,
+  'skein256-112': 0xb30e,
+  'skein256-120': 0xb30f,
+  'skein256-128': 0xb310,
+  'skein256-136': 0xb311,
+  'skein256-144': 0xb312,
+  'skein256-152': 0xb313,
+  'skein256-160': 0xb314,
+  'skein256-168': 0xb315,
+  'skein256-176': 0xb316,
+  'skein256-184': 0xb317,
+  'skein256-192': 0xb318,
+  'skein256-200': 0xb319,
+  'skein256-208': 0xb31a,
+  'skein256-216': 0xb31b,
+  'skein256-224': 0xb31c,
+  'skein256-232': 0xb31d,
+  'skein256-240': 0xb31e,
+  'skein256-248': 0xb31f,
+  'skein256-256': 0xb320,
+  'skein512-8': 0xb321,
+  'skein512-16': 0xb322,
+  'skein512-24': 0xb323,
+  'skein512-32': 0xb324,
+  'skein512-40': 0xb325,
+  'skein512-48': 0xb326,
+  'skein512-56': 0xb327,
+  'skein512-64': 0xb328,
+  'skein512-72': 0xb329,
+  'skein512-80': 0xb32a,
+  'skein512-88': 0xb32b,
+  'skein512-96': 0xb32c,
+  'skein512-104': 0xb32d,
+  'skein512-112': 0xb32e,
+  'skein512-120': 0xb32f,
+  'skein512-128': 0xb330,
+  'skein512-136': 0xb331,
+  'skein512-144': 0xb332,
+  'skein512-152': 0xb333,
+  'skein512-160': 0xb334,
+  'skein512-168': 0xb335,
+  'skein512-176': 0xb336,
+  'skein512-184': 0xb337,
+  'skein512-192': 0xb338,
+  'skein512-200': 0xb339,
+  'skein512-208': 0xb33a,
+  'skein512-216': 0xb33b,
+  'skein512-224': 0xb33c,
+  'skein512-232': 0xb33d,
+  'skein512-240': 0xb33e,
+  'skein512-248': 0xb33f,
+  'skein512-256': 0xb340,
+  'skein512-264': 0xb341,
+  'skein512-272': 0xb342,
+  'skein512-280': 0xb343,
+  'skein512-288': 0xb344,
+  'skein512-296': 0xb345,
+  'skein512-304': 0xb346,
+  'skein512-312': 0xb347,
+  'skein512-320': 0xb348,
+  'skein512-328': 0xb349,
+  'skein512-336': 0xb34a,
+  'skein512-344': 0xb34b,
+  'skein512-352': 0xb34c,
+  'skein512-360': 0xb34d,
+  'skein512-368': 0xb34e,
+  'skein512-376': 0xb34f,
+  'skein512-384': 0xb350,
+  'skein512-392': 0xb351,
+  'skein512-400': 0xb352,
+  'skein512-408': 0xb353,
+  'skein512-416': 0xb354,
+  'skein512-424': 0xb355,
+  'skein512-432': 0xb356,
+  'skein512-440': 0xb357,
+  'skein512-448': 0xb358,
+  'skein512-456': 0xb359,
+  'skein512-464': 0xb35a,
+  'skein512-472': 0xb35b,
+  'skein512-480': 0xb35c,
+  'skein512-488': 0xb35d,
+  'skein512-496': 0xb35e,
+  'skein512-504': 0xb35f,
+  'skein512-512': 0xb360,
+  'skein1024-8': 0xb361,
+  'skein1024-16': 0xb362,
+  'skein1024-24': 0xb363,
+  'skein1024-32': 0xb364,
+  'skein1024-40': 0xb365,
+  'skein1024-48': 0xb366,
+  'skein1024-56': 0xb367,
+  'skein1024-64': 0xb368,
+  'skein1024-72': 0xb369,
+  'skein1024-80': 0xb36a,
+  'skein1024-88': 0xb36b,
+  'skein1024-96': 0xb36c,
+  'skein1024-104': 0xb36d,
+  'skein1024-112': 0xb36e,
+  'skein1024-120': 0xb36f,
+  'skein1024-128': 0xb370,
+  'skein1024-136': 0xb371,
+  'skein1024-144': 0xb372,
+  'skein1024-152': 0xb373,
+  'skein1024-160': 0xb374,
+  'skein1024-168': 0xb375,
+  'skein1024-176': 0xb376,
+  'skein1024-184': 0xb377,
+  'skein1024-192': 0xb378,
+  'skein1024-200': 0xb379,
+  'skein1024-208': 0xb37a,
+  'skein1024-216': 0xb37b,
+  'skein1024-224': 0xb37c,
+  'skein1024-232': 0xb37d,
+  'skein1024-240': 0xb37e,
+  'skein1024-248': 0xb37f,
+  'skein1024-256': 0xb380,
+  'skein1024-264': 0xb381,
+  'skein1024-272': 0xb382,
+  'skein1024-280': 0xb383,
+  'skein1024-288': 0xb384,
+  'skein1024-296': 0xb385,
+  'skein1024-304': 0xb386,
+  'skein1024-312': 0xb387,
+  'skein1024-320': 0xb388,
+  'skein1024-328': 0xb389,
+  'skein1024-336': 0xb38a,
+  'skein1024-344': 0xb38b,
+  'skein1024-352': 0xb38c,
+  'skein1024-360': 0xb38d,
+  'skein1024-368': 0xb38e,
+  'skein1024-376': 0xb38f,
+  'skein1024-384': 0xb390,
+  'skein1024-392': 0xb391,
+  'skein1024-400': 0xb392,
+  'skein1024-408': 0xb393,
+  'skein1024-416': 0xb394,
+  'skein1024-424': 0xb395,
+  'skein1024-432': 0xb396,
+  'skein1024-440': 0xb397,
+  'skein1024-448': 0xb398,
+  'skein1024-456': 0xb399,
+  'skein1024-464': 0xb39a,
+  'skein1024-472': 0xb39b,
+  'skein1024-480': 0xb39c,
+  'skein1024-488': 0xb39d,
+  'skein1024-496': 0xb39e,
+  'skein1024-504': 0xb39f,
+  'skein1024-512': 0xb3a0,
+  'skein1024-520': 0xb3a1,
+  'skein1024-528': 0xb3a2,
+  'skein1024-536': 0xb3a3,
+  'skein1024-544': 0xb3a4,
+  'skein1024-552': 0xb3a5,
+  'skein1024-560': 0xb3a6,
+  'skein1024-568': 0xb3a7,
+  'skein1024-576': 0xb3a8,
+  'skein1024-584': 0xb3a9,
+  'skein1024-592': 0xb3aa,
+  'skein1024-600': 0xb3ab,
+  'skein1024-608': 0xb3ac,
+  'skein1024-616': 0xb3ad,
+  'skein1024-624': 0xb3ae,
+  'skein1024-632': 0xb3af,
+  'skein1024-640': 0xb3b0,
+  'skein1024-648': 0xb3b1,
+  'skein1024-656': 0xb3b2,
+  'skein1024-664': 0xb3b3,
+  'skein1024-672': 0xb3b4,
+  'skein1024-680': 0xb3b5,
+  'skein1024-688': 0xb3b6,
+  'skein1024-696': 0xb3b7,
+  'skein1024-704': 0xb3b8,
+  'skein1024-712': 0xb3b9,
+  'skein1024-720': 0xb3ba,
+  'skein1024-728': 0xb3bb,
+  'skein1024-736': 0xb3bc,
+  'skein1024-744': 0xb3bd,
+  'skein1024-752': 0xb3be,
+  'skein1024-760': 0xb3bf,
+  'skein1024-768': 0xb3c0,
+  'skein1024-776': 0xb3c1,
+  'skein1024-784': 0xb3c2,
+  'skein1024-792': 0xb3c3,
+  'skein1024-800': 0xb3c4,
+  'skein1024-808': 0xb3c5,
+  'skein1024-816': 0xb3c6,
+  'skein1024-824': 0xb3c7,
+  'skein1024-832': 0xb3c8,
+  'skein1024-840': 0xb3c9,
+  'skein1024-848': 0xb3ca,
+  'skein1024-856': 0xb3cb,
+  'skein1024-864': 0xb3cc,
+  'skein1024-872': 0xb3cd,
+  'skein1024-880': 0xb3ce,
+  'skein1024-888': 0xb3cf,
+  'skein1024-896': 0xb3d0,
+  'skein1024-904': 0xb3d1,
+  'skein1024-912': 0xb3d2,
+  'skein1024-920': 0xb3d3,
+  'skein1024-928': 0xb3d4,
+  'skein1024-936': 0xb3d5,
+  'skein1024-944': 0xb3d6,
+  'skein1024-952': 0xb3d7,
+  'skein1024-960': 0xb3d8,
+  'skein1024-968': 0xb3d9,
+  'skein1024-976': 0xb3da,
+  'skein1024-984': 0xb3db,
+  'skein1024-992': 0xb3dc,
+  'skein1024-1000': 0xb3dd,
+  'skein1024-1008': 0xb3de,
+  'skein1024-1016': 0xb3df,
+  'skein1024-1024': 0xb3e0,
+  'poseidon-bls12_381-a2-fc1': 0xb401,
+  'poseidon-bls12_381-a2-fc1-sc': 0xb402
+})
+
+module.exports = { names }
+
+},{}],12:[function(require,module,exports){
+/* eslint-disable guard-for-in */
+/**
+ * Multihash implementation in JavaScript.
+ *
+ * @module multihash
+ */
+'use strict'
+
+const { Buffer } = require('buffer')
+const multibase = require('multibase')
+const varint = require('varint')
+const { names } = require('./constants')
+
+const codes = {}
+
+for (const key in names) {
+  codes[names[key]] = key
+}
+exports.names = names
+exports.codes = Object.freeze(codes)
+
+/**
+ * Convert the given multihash to a hex encoded string.
+ *
+ * @param {Buffer} hash
+ * @returns {string}
+ */
+exports.toHexString = function toHexString (hash) {
+  if (!Buffer.isBuffer(hash)) {
+    throw new Error('must be passed a buffer')
+  }
+
+  return hash.toString('hex')
+}
+
+/**
+ * Convert the given hex encoded string to a multihash.
+ *
+ * @param {string} hash
+ * @returns {Buffer}
+ */
+exports.fromHexString = function fromHexString (hash) {
+  return Buffer.from(hash, 'hex')
+}
+
+/**
+ * Convert the given multihash to a base58 encoded string.
+ *
+ * @param {Buffer} hash
+ * @returns {string}
+ */
+exports.toB58String = function toB58String (hash) {
+  if (!Buffer.isBuffer(hash)) {
+    throw new Error('must be passed a buffer')
+  }
+
+  return multibase.encode('base58btc', hash).toString().slice(1)
+}
+
+/**
+ * Convert the given base58 encoded string to a multihash.
+ *
+ * @param {string|Buffer} hash
+ * @returns {Buffer}
+ */
+exports.fromB58String = function fromB58String (hash) {
+  let encoded = hash
+  if (Buffer.isBuffer(hash)) {
+    encoded = hash.toString()
+  }
+
+  return multibase.decode('z' + encoded)
+}
+
+/**
+ * Decode a hash from the given multihash.
+ *
+ * @param {Buffer} buf
+ * @returns {{code: number, name: string, length: number, digest: Buffer}} result
+ */
+exports.decode = function decode (buf) {
+  if (!(Buffer.isBuffer(buf))) {
+    throw new Error('multihash must be a Buffer')
+  }
+
+  if (buf.length < 2) {
+    throw new Error('multihash too short. must be > 2 bytes.')
+  }
+
+  const code = varint.decode(buf)
+  if (!exports.isValidCode(code)) {
+    throw new Error(`multihash unknown function code: 0x${code.toString(16)}`)
+  }
+  buf = buf.slice(varint.decode.bytes)
+
+  const len = varint.decode(buf)
+  if (len < 0) {
+    throw new Error(`multihash invalid length: ${len}`)
+  }
+  buf = buf.slice(varint.decode.bytes)
+
+  if (buf.length !== len) {
+    throw new Error(`multihash length inconsistent: 0x${buf.toString('hex')}`)
+  }
+
+  return {
+    code,
+    name: codes[code],
+    length: len,
+    digest: buf
+  }
+}
+
+/**
+ *  Encode a hash digest along with the specified function code.
+ *
+ * > **Note:** the length is derived from the length of the digest itself.
+ *
+ * @param {Buffer} digest
+ * @param {string|number} code
+ * @param {number} [length]
+ * @returns {Buffer}
+ */
+exports.encode = function encode (digest, code, length) {
+  if (!digest || code === undefined) {
+    throw new Error('multihash encode requires at least two args: digest, code')
+  }
+
+  // ensure it's a hashfunction code.
+  const hashfn = exports.coerceCode(code)
+
+  if (!(Buffer.isBuffer(digest))) {
+    throw new Error('digest should be a Buffer')
+  }
+
+  if (length == null) {
+    length = digest.length
+  }
+
+  if (length && digest.length !== length) {
+    throw new Error('digest length should be equal to specified length.')
+  }
+
+  return Buffer.concat([
+    Buffer.from(varint.encode(hashfn)),
+    Buffer.from(varint.encode(length)),
+    digest
+  ])
+}
+
+/**
+ * Converts a hash function name into the matching code.
+ * If passed a number it will return the number if it's a valid code.
+ * @param {string|number} name
+ * @returns {number}
+ */
+exports.coerceCode = function coerceCode (name) {
+  let code = name
+
+  if (typeof name === 'string') {
+    if (names[name] === undefined) {
+      throw new Error(`Unrecognized hash function named: ${name}`)
+    }
+    code = names[name]
+  }
+
+  if (typeof code !== 'number') {
+    throw new Error(`Hash function code should be a number. Got: ${code}`)
+  }
+
+  if (codes[code] === undefined && !exports.isAppCode(code)) {
+    throw new Error(`Unrecognized function code: ${code}`)
+  }
+
+  return code
+}
+
+/**
+ * Checks wether a code is part of the app range
+ *
+ * @param {number} code
+ * @returns {boolean}
+ */
+exports.isAppCode = function appCode (code) {
+  return code > 0 && code < 0x10
+}
+
+/**
+ * Checks whether a multihash code is valid.
+ *
+ * @param {number} code
+ * @returns {boolean}
+ */
+exports.isValidCode = function validCode (code) {
+  if (exports.isAppCode(code)) {
+    return true
+  }
+
+  if (codes[code]) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Check if the given buffer is a valid multihash. Throws an error if it is not valid.
+ *
+ * @param {Buffer} multihash
+ * @returns {undefined}
+ * @throws {Error}
+ */
+function validate (multihash) {
+  exports.decode(multihash) // throws if bad.
+}
+exports.validate = validate
+
+/**
+ * Returns a prefix from a valid multihash. Throws an error if it is not valid.
+ *
+ * @param {Buffer} multihash
+ * @returns {undefined}
+ * @throws {Error}
+ */
+exports.prefix = function prefix (multihash) {
+  validate(multihash)
+
+  return multihash.slice(0, 2)
+}
+
+},{"./constants":11,"buffer":3,"multibase":20,"varint":39}],13:[function(require,module,exports){
 'use strict'
 
 const mh = require('multihashes')
-
+const { Buffer } = require('buffer')
 var CIDUtil = {
   /**
    * Test if the given input is a valid CID object.
@@ -2085,10 +3373,10 @@ var CIDUtil = {
 
     if (other.version === 0) {
       if (other.codec !== 'dag-pb') {
-        return `codec must be 'dag-pb' for CIDv0`
+        return "codec must be 'dag-pb' for CIDv0"
       }
       if (other.multibaseName !== 'base58btc') {
-        return `multibaseName must be 'base58btc' for CIDv0`
+        return "multibaseName must be 'base58btc' for CIDv0"
       }
     }
 
@@ -2110,15 +3398,14 @@ var CIDUtil = {
 
 module.exports = CIDUtil
 
-}).call(this,{"isBuffer":require("../../is-buffer/index.js")})
-},{"../../is-buffer/index.js":9,"multihashes":24}],6:[function(require,module,exports){
-(function (Buffer){
+},{"buffer":3,"multihashes":12}],14:[function(require,module,exports){
 'use strict'
 
+const { Buffer } = require('buffer')
 const mh = require('multihashes')
 const multibase = require('multibase')
 const multicodec = require('multicodec')
-const codecs = require('multicodec/src/base-table')
+const codecs = require('multicodec/src/base-table.json')
 const CIDUtil = require('./cid-util')
 const withIs = require('class-is')
 
@@ -2359,6 +3646,15 @@ class CID {
     return str
   }
 
+  /**
+   * CID(QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n)
+   *
+   * @returns {String}
+   */
+  [Symbol.for('nodejs.util.inspect.custom')] () {
+    return 'CID(' + this.toString() + ')'
+  }
+
   toString (base) {
     return this.toBaseEncodedString(base)
   }
@@ -2396,7 +3692,7 @@ class CID {
    * @returns {void}
    */
   static validateCID (other) {
-    let errorMsg = CIDUtil.checkCIDComponents(other)
+    const errorMsg = CIDUtil.checkCIDComponents(other)
     if (errorMsg) {
       throw new Error(errorMsg)
     }
@@ -2412,8 +3708,7 @@ _CID.codecs = codecs
 
 module.exports = _CID
 
-}).call(this,require("buffer").Buffer)
-},{"./cid-util":5,"buffer":4,"class-is":7,"multibase":15,"multicodec":18,"multicodec/src/base-table":16,"multihashes":24}],7:[function(require,module,exports){
+},{"./cid-util":13,"buffer":3,"class-is":15,"multibase":20,"multicodec":6,"multicodec/src/base-table.json":4,"multihashes":12}],15:[function(require,module,exports){
 'use strict';
 
 function withIs(Class, { className, symbolName }) {
@@ -2481,7 +3776,7 @@ function withIsProto(Class, { className, symbolName, withoutNew }) {
 module.exports = withIs;
 module.exports.proto = withIsProto;
 
-},{}],8:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = (nBytes * 8) - mLen - 1
@@ -2567,240 +3862,77 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],9:[function(require,module,exports){
-/*!
- * Determine if an object is a Buffer
- *
- * @author   Feross Aboukhadijeh <https://feross.org>
- * @license  MIT
- */
-
-// The _isBuffer check is for Safari 5-7 support, because it's missing
-// Object.prototype.constructor. Remove this eventually
-module.exports = function (obj) {
-  return obj != null && (isBuffer(obj) || isSlowBuffer(obj) || !!obj._isBuffer)
-}
-
-function isBuffer (obj) {
-  return !!obj.constructor && typeof obj.constructor.isBuffer === 'function' && obj.constructor.isBuffer(obj)
-}
-
-// For Node v0.10 support. Remove this eventually.
-function isSlowBuffer (obj) {
-  return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isBuffer(obj.slice(0, 0))
-}
-
-},{}],10:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
+arguments[4][1][0].apply(exports,arguments)
+},{"dup":1,"safe-buffer":36}],18:[function(require,module,exports){
 'use strict'
+const { Buffer } = require('buffer')
 
 class Base {
   constructor (name, code, implementation, alphabet) {
     this.name = name
     this.code = code
+    this.codeBuf = Buffer.from(this.code)
     this.alphabet = alphabet
-    if (implementation && alphabet) {
-      this.engine = implementation(alphabet)
+    this.engine = implementation(alphabet)
+  }
+
+  encode (buf) {
+    return this.engine.encode(buf)
+  }
+
+  decode (string) {
+    for (const char of string) {
+      if (this.alphabet && this.alphabet.indexOf(char) < 0) {
+        throw new Error(`invalid character '${char}' in '${string}'`)
+      }
     }
-  }
-
-  encode (stringOrBuffer) {
-    return this.engine.encode(stringOrBuffer)
-  }
-
-  decode (stringOrBuffer) {
-    return this.engine.decode(stringOrBuffer)
-  }
-
-  isImplemented () {
-    return this.engine
+    return this.engine.decode(string)
   }
 }
 
 module.exports = Base
 
-},{}],11:[function(require,module,exports){
-(function (Buffer){
+},{"buffer":3}],19:[function(require,module,exports){
 'use strict'
 
-module.exports = function base16 (alphabet) {
-  return {
-    encode (input) {
-      if (typeof input === 'string') {
-        return Buffer.from(input).toString('hex')
-      }
-      return input.toString('hex')
-    },
-    decode (input) {
-      for (let char of input) {
-        if (alphabet.indexOf(char) < 0) {
-          throw new Error('invalid base16 character')
-        }
-      }
-      return Buffer.from(input, 'hex')
-    }
-  }
-}
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":4}],12:[function(require,module,exports){
-(function (Buffer){
-'use strict'
-
-function decode (input, alphabet) {
-  input = input.replace(new RegExp('=', 'g'), '')
-  let length = input.length
-
-  let bits = 0
-  let value = 0
-
-  let index = 0
-  let output = new Uint8Array((length * 5 / 8) | 0)
-
-  for (let i = 0; i < length; i++) {
-    value = (value << 5) | alphabet.indexOf(input[i])
-    bits += 5
-
-    if (bits >= 8) {
-      output[index++] = (value >>> (bits - 8)) & 255
-      bits -= 8
-    }
-  }
-
-  return output.buffer
-}
-
-function encode (buffer, alphabet) {
-  let length = buffer.byteLength
-  let view = new Uint8Array(buffer)
-  let padding = alphabet.indexOf('=') === alphabet.length - 1
-
-  if (padding) {
-    alphabet = alphabet.substring(0, alphabet.length - 2)
-  }
-
-  let bits = 0
-  let value = 0
-  let output = ''
-
-  for (let i = 0; i < length; i++) {
-    value = (value << 8) | view[i]
-    bits += 8
-
-    while (bits >= 5) {
-      output += alphabet[(value >>> (bits - 5)) & 31]
-      bits -= 5
-    }
-  }
-
-  if (bits > 0) {
-    output += alphabet[(value << (5 - bits)) & 31]
-  }
-
-  if (padding) {
-    while ((output.length % 8) !== 0) {
-      output += '='
-    }
-  }
-
-  return output
-}
-
-module.exports = function base32 (alphabet) {
-  return {
-    encode (input) {
-      if (typeof input === 'string') {
-        return encode(Buffer.from(input), alphabet)
-      }
-
-      return encode(input, alphabet)
-    },
-    decode (input) {
-      for (let char of input) {
-        if (alphabet.indexOf(char) < 0) {
-          throw new Error('invalid base32 character')
-        }
-      }
-
-      return decode(input, alphabet)
-    }
-  }
-}
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":4}],13:[function(require,module,exports){
-(function (Buffer){
-'use strict'
-
-module.exports = function base64 (alphabet) {
-  // The alphabet is only used to know:
-  //   1. If padding is enabled (must contain '=')
-  //   2. If the output must be url-safe (must contain '-' and '_')
-  //   3. If the input of the output function is valid
-  // The alphabets from RFC 4648 are always used.
-  const padding = alphabet.indexOf('=') > -1
-  const url = alphabet.indexOf('-') > -1 && alphabet.indexOf('_') > -1
-
-  return {
-    encode (input) {
-      let output = ''
-
-      if (typeof input === 'string') {
-        output = Buffer.from(input).toString('base64')
-      } else {
-        output = input.toString('base64')
-      }
-
-      if (url) {
-        output = output.replace(/\+/g, '-').replace(/\//g, '_')
-      }
-
-      const pad = output.indexOf('=')
-      if (pad > 0 && !padding) {
-        output = output.substring(0, pad)
-      }
-
-      return output
-    },
-    decode (input) {
-      for (let char of input) {
-        if (alphabet.indexOf(char) < 0) {
-          throw new Error('invalid base64 character')
-        }
-      }
-
-      return Buffer.from(input, 'base64')
-    }
-  }
-}
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":4}],14:[function(require,module,exports){
-'use strict'
-
-const Base = require('./base.js')
 const baseX = require('base-x')
-const base16 = require('./base16')
-const base32 = require('./base32')
-const base64 = require('./base64')
+const { Buffer } = require('buffer')
+const Base = require('./base.js')
+const rfc4648 = require('./rfc4648')
+
+const identity = () => {
+  return {
+    encode: (data) => Buffer.from(data).toString(),
+    decode: (string) => Buffer.from(string)
+  }
+}
 
 // name, code, implementation, alphabet
 const constants = [
-  ['base1', '1', '', '1'],
-  ['base2', '0', baseX, '01'],
-  ['base8', '7', baseX, '01234567'],
+  ['identity', '\x00', identity, ''],
+  ['base2', '0', rfc4648(1), '01'],
+  ['base8', '7', rfc4648(3), '01234567'],
   ['base10', '9', baseX, '0123456789'],
-  ['base16', 'f', base16, '0123456789abcdef'],
-  ['base32', 'b', base32, 'abcdefghijklmnopqrstuvwxyz234567'],
-  ['base32pad', 'c', base32, 'abcdefghijklmnopqrstuvwxyz234567='],
-  ['base32hex', 'v', base32, '0123456789abcdefghijklmnopqrstuv'],
-  ['base32hexpad', 't', base32, '0123456789abcdefghijklmnopqrstuv='],
-  ['base32z', 'h', base32, 'ybndrfg8ejkmcpqxot1uwisza345h769'],
-  ['base58flickr', 'Z', baseX, '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'],
+  ['base16', 'f', rfc4648(4), '0123456789abcdef'],
+  ['base16upper', 'F', rfc4648(4), '0123456789ABCDEF'],
+  ['base32hex', 'v', rfc4648(5), '0123456789abcdefghijklmnopqrstuv'],
+  ['base32hexupper', 'V', rfc4648(5), '0123456789ABCDEFGHIJKLMNOPQRSTUV'],
+  ['base32hexpad', 't', rfc4648(5), '0123456789abcdefghijklmnopqrstuv='],
+  ['base32hexpadupper', 'T', rfc4648(5), '0123456789ABCDEFGHIJKLMNOPQRSTUV='],
+  ['base32', 'b', rfc4648(5), 'abcdefghijklmnopqrstuvwxyz234567'],
+  ['base32upper', 'B', rfc4648(5), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'],
+  ['base32pad', 'c', rfc4648(5), 'abcdefghijklmnopqrstuvwxyz234567='],
+  ['base32padupper', 'C', rfc4648(5), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567='],
+  ['base32z', 'h', rfc4648(5), 'ybndrfg8ejkmcpqxot1uwisza345h769'],
+  ['base36', 'k', baseX, '0123456789abcdefghijklmnopqrstuvwxyz'],
+  ['base36upper', 'K', baseX, '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'],
   ['base58btc', 'z', baseX, '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'],
-  ['base64', 'm', base64, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'],
-  ['base64pad', 'M', base64, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='],
-  ['base64url', 'u', base64, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'],
-  ['base64urlpad', 'U', base64, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=']
+  ['base58flickr', 'Z', baseX, '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'],
+  ['base64', 'm', rfc4648(6), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'],
+  ['base64pad', 'M', rfc4648(6), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='],
+  ['base64url', 'u', rfc4648(6), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'],
+  ['base64urlpad', 'U', rfc4648(6), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=']
 ]
 
 const names = constants.reduce((prev, tupple) => {
@@ -2814,47 +3946,38 @@ const codes = constants.reduce((prev, tupple) => {
 }, {})
 
 module.exports = {
-  names: names,
-  codes: codes
+  names,
+  codes
 }
 
-},{"./base.js":10,"./base16":11,"./base32":12,"./base64":13,"base-x":1}],15:[function(require,module,exports){
-(function (Buffer){
+},{"./base.js":18,"./rfc4648":21,"base-x":17,"buffer":3}],20:[function(require,module,exports){
 /**
  * Implementation of the [multibase](https://github.com/multiformats/multibase) specification.
+ *
  * @module Multibase
  */
 'use strict'
 
+const { Buffer } = require('buffer')
 const constants = require('./constants')
 
-exports = module.exports = multibase
-exports.encode = encode
-exports.decode = decode
-exports.isEncoded = isEncoded
-exports.names = Object.freeze(Object.keys(constants.names))
-exports.codes = Object.freeze(Object.keys(constants.codes))
-
-const errNotSupported = new Error('Unsupported encoding')
+/** @typedef {import("./base")} Base */
 
 /**
  * Create a new buffer with the multibase varint+code.
  *
  * @param {string|number} nameOrCode - The multibase name or code number.
  * @param {Buffer} buf - The data to be prefixed with multibase.
- * @memberof Multibase
  * @returns {Buffer}
+ * @throws {Error} Will throw if the encoding is not supported
  */
 function multibase (nameOrCode, buf) {
   if (!buf) {
     throw new Error('requires an encoded buffer')
   }
-  const base = getBase(nameOrCode)
-  const codeBuf = Buffer.from(base.code)
-
-  const name = base.name
-  validEncode(name, buf)
-  return Buffer.concat([codeBuf, buf])
+  const enc = encoding(nameOrCode)
+  validEncode(enc.name, buf)
+  return Buffer.concat([enc.codeBuf, buf])
 }
 
 /**
@@ -2863,2670 +3986,648 @@ function multibase (nameOrCode, buf) {
  * @param {string|number} nameOrCode - The multibase name or code number.
  * @param {Buffer} buf - The data to be encoded.
  * @returns {Buffer}
- * @memberof Multibase
+ * @throws {Error} Will throw if the encoding is not supported
+ *
  */
 function encode (nameOrCode, buf) {
-  const base = getBase(nameOrCode)
-  const name = base.name
+  const enc = encoding(nameOrCode)
 
-  return multibase(name, Buffer.from(base.encode(buf)))
+  return Buffer.concat([enc.codeBuf, Buffer.from(enc.encode(buf))])
 }
 
 /**
  * Takes a buffer or string encoded with multibase header, decodes it and
  * returns the decoded buffer
  *
- * @param {Buffer|string} bufOrString
+ * @param {Buffer|string} data
  * @returns {Buffer}
- * @memberof Multibase
+ * @throws {Error} Will throw if the encoding is not supported
  *
  */
-function decode (bufOrString) {
-  if (Buffer.isBuffer(bufOrString)) {
-    bufOrString = bufOrString.toString()
+function decode (data) {
+  if (Buffer.isBuffer(data)) {
+    data = data.toString()
   }
+  const prefix = data[0]
 
-  const code = bufOrString.substring(0, 1)
-  bufOrString = bufOrString.substring(1, bufOrString.length)
-
-  if (typeof bufOrString === 'string') {
-    bufOrString = Buffer.from(bufOrString)
+  // Make all encodings case-insensitive except the ones that include upper and lower chars in the alphabet
+  if (['f', 'F', 'v', 'V', 't', 'T', 'b', 'B', 'c', 'C', 'h', 'k', 'K'].includes(prefix)) {
+    data = data.toLowerCase()
   }
-
-  const base = getBase(code)
-  return Buffer.from(base.decode(bufOrString.toString()))
+  const enc = encoding(data[0])
+  return Buffer.from(enc.decode(data.substring(1)))
 }
 
 /**
  * Is the given data multibase encoded?
  *
- * @param {Buffer|string} bufOrString
+ * @param {Buffer|string} data
  * @returns {boolean}
- * @memberof Multibase
  */
-function isEncoded (bufOrString) {
-  if (Buffer.isBuffer(bufOrString)) {
-    bufOrString = bufOrString.toString()
+function isEncoded (data) {
+  if (Buffer.isBuffer(data)) {
+    data = data.toString()
   }
 
   // Ensure bufOrString is a string
-  if (Object.prototype.toString.call(bufOrString) !== '[object String]') {
+  if (Object.prototype.toString.call(data) !== '[object String]') {
     return false
   }
 
-  const code = bufOrString.substring(0, 1)
   try {
-    const base = getBase(code)
-    return base.name
+    const enc = encoding(data[0])
+    return enc.name
   } catch (err) {
     return false
   }
 }
 
 /**
+ * Validate encoded data
+ *
  * @param {string} name
  * @param {Buffer} buf
- * @private
  * @returns {undefined}
+ * @throws {Error} Will throw if the encoding is not supported
  */
 function validEncode (name, buf) {
-  const base = getBase(name)
-  base.decode(buf.toString())
+  const enc = encoding(name)
+  enc.decode(buf.toString())
 }
 
-function getBase (nameOrCode) {
-  let base
-
+/**
+ * Get the encoding by name or code
+ *
+ * @param {string} nameOrCode
+ * @returns {Base}
+ * @throws {Error} Will throw if the encoding is not supported
+ */
+function encoding (nameOrCode) {
   if (constants.names[nameOrCode]) {
-    base = constants.names[nameOrCode]
+    return constants.names[nameOrCode]
   } else if (constants.codes[nameOrCode]) {
-    base = constants.codes[nameOrCode]
+    return constants.codes[nameOrCode]
   } else {
-    throw errNotSupported
+    throw new Error(`Unsupported encoding: ${nameOrCode}`)
   }
-
-  if (!base.isImplemented()) {
-    throw new Error('Base ' + nameOrCode + ' is not implemented yet')
-  }
-
-  return base
 }
 
-}).call(this,require("buffer").Buffer)
-},{"./constants":14,"buffer":4}],16:[function(require,module,exports){
-(function (Buffer){
-// THIS FILE IS GENERATED, DO NO EDIT MANUALLY
-// For more information see the README.md
-/* eslint-disable dot-notation */
-'use strict'
-
-// serialization
-exports['protobuf'] = Buffer.from('50', 'hex')
-exports['cbor'] = Buffer.from('51', 'hex')
-exports['rlp'] = Buffer.from('60', 'hex')
-exports['bencode'] = Buffer.from('63', 'hex')
-exports['json'] = Buffer.from('0200', 'hex')
-exports['messagepack'] = Buffer.from('0201', 'hex')
-
-// multiformat
-exports['multicodec'] = Buffer.from('30', 'hex')
-exports['multihash'] = Buffer.from('31', 'hex')
-exports['multiaddr'] = Buffer.from('32', 'hex')
-exports['multibase'] = Buffer.from('33', 'hex')
-
-// multihash
-exports['identity'] = Buffer.from('00', 'hex')
-exports['sha1'] = Buffer.from('11', 'hex')
-exports['sha2-256'] = Buffer.from('12', 'hex')
-exports['sha2-512'] = Buffer.from('13', 'hex')
-exports['sha3-512'] = Buffer.from('14', 'hex')
-exports['sha3-384'] = Buffer.from('15', 'hex')
-exports['sha3-256'] = Buffer.from('16', 'hex')
-exports['sha3-224'] = Buffer.from('17', 'hex')
-exports['shake-128'] = Buffer.from('18', 'hex')
-exports['shake-256'] = Buffer.from('19', 'hex')
-exports['keccak-224'] = Buffer.from('1a', 'hex')
-exports['keccak-256'] = Buffer.from('1b', 'hex')
-exports['keccak-384'] = Buffer.from('1c', 'hex')
-exports['keccak-512'] = Buffer.from('1d', 'hex')
-exports['murmur3-128'] = Buffer.from('22', 'hex')
-exports['murmur3-32'] = Buffer.from('23', 'hex')
-exports['dbl-sha2-256'] = Buffer.from('56', 'hex')
-exports['md4'] = Buffer.from('d4', 'hex')
-exports['md5'] = Buffer.from('d5', 'hex')
-exports['bmt'] = Buffer.from('d6', 'hex')
-exports['x11'] = Buffer.from('1100', 'hex')
-exports['blake2b-8'] = Buffer.from('b201', 'hex')
-exports['blake2b-16'] = Buffer.from('b202', 'hex')
-exports['blake2b-24'] = Buffer.from('b203', 'hex')
-exports['blake2b-32'] = Buffer.from('b204', 'hex')
-exports['blake2b-40'] = Buffer.from('b205', 'hex')
-exports['blake2b-48'] = Buffer.from('b206', 'hex')
-exports['blake2b-56'] = Buffer.from('b207', 'hex')
-exports['blake2b-64'] = Buffer.from('b208', 'hex')
-exports['blake2b-72'] = Buffer.from('b209', 'hex')
-exports['blake2b-80'] = Buffer.from('b20a', 'hex')
-exports['blake2b-88'] = Buffer.from('b20b', 'hex')
-exports['blake2b-96'] = Buffer.from('b20c', 'hex')
-exports['blake2b-104'] = Buffer.from('b20d', 'hex')
-exports['blake2b-112'] = Buffer.from('b20e', 'hex')
-exports['blake2b-120'] = Buffer.from('b20f', 'hex')
-exports['blake2b-128'] = Buffer.from('b210', 'hex')
-exports['blake2b-136'] = Buffer.from('b211', 'hex')
-exports['blake2b-144'] = Buffer.from('b212', 'hex')
-exports['blake2b-152'] = Buffer.from('b213', 'hex')
-exports['blake2b-160'] = Buffer.from('b214', 'hex')
-exports['blake2b-168'] = Buffer.from('b215', 'hex')
-exports['blake2b-176'] = Buffer.from('b216', 'hex')
-exports['blake2b-184'] = Buffer.from('b217', 'hex')
-exports['blake2b-192'] = Buffer.from('b218', 'hex')
-exports['blake2b-200'] = Buffer.from('b219', 'hex')
-exports['blake2b-208'] = Buffer.from('b21a', 'hex')
-exports['blake2b-216'] = Buffer.from('b21b', 'hex')
-exports['blake2b-224'] = Buffer.from('b21c', 'hex')
-exports['blake2b-232'] = Buffer.from('b21d', 'hex')
-exports['blake2b-240'] = Buffer.from('b21e', 'hex')
-exports['blake2b-248'] = Buffer.from('b21f', 'hex')
-exports['blake2b-256'] = Buffer.from('b220', 'hex')
-exports['blake2b-264'] = Buffer.from('b221', 'hex')
-exports['blake2b-272'] = Buffer.from('b222', 'hex')
-exports['blake2b-280'] = Buffer.from('b223', 'hex')
-exports['blake2b-288'] = Buffer.from('b224', 'hex')
-exports['blake2b-296'] = Buffer.from('b225', 'hex')
-exports['blake2b-304'] = Buffer.from('b226', 'hex')
-exports['blake2b-312'] = Buffer.from('b227', 'hex')
-exports['blake2b-320'] = Buffer.from('b228', 'hex')
-exports['blake2b-328'] = Buffer.from('b229', 'hex')
-exports['blake2b-336'] = Buffer.from('b22a', 'hex')
-exports['blake2b-344'] = Buffer.from('b22b', 'hex')
-exports['blake2b-352'] = Buffer.from('b22c', 'hex')
-exports['blake2b-360'] = Buffer.from('b22d', 'hex')
-exports['blake2b-368'] = Buffer.from('b22e', 'hex')
-exports['blake2b-376'] = Buffer.from('b22f', 'hex')
-exports['blake2b-384'] = Buffer.from('b230', 'hex')
-exports['blake2b-392'] = Buffer.from('b231', 'hex')
-exports['blake2b-400'] = Buffer.from('b232', 'hex')
-exports['blake2b-408'] = Buffer.from('b233', 'hex')
-exports['blake2b-416'] = Buffer.from('b234', 'hex')
-exports['blake2b-424'] = Buffer.from('b235', 'hex')
-exports['blake2b-432'] = Buffer.from('b236', 'hex')
-exports['blake2b-440'] = Buffer.from('b237', 'hex')
-exports['blake2b-448'] = Buffer.from('b238', 'hex')
-exports['blake2b-456'] = Buffer.from('b239', 'hex')
-exports['blake2b-464'] = Buffer.from('b23a', 'hex')
-exports['blake2b-472'] = Buffer.from('b23b', 'hex')
-exports['blake2b-480'] = Buffer.from('b23c', 'hex')
-exports['blake2b-488'] = Buffer.from('b23d', 'hex')
-exports['blake2b-496'] = Buffer.from('b23e', 'hex')
-exports['blake2b-504'] = Buffer.from('b23f', 'hex')
-exports['blake2b-512'] = Buffer.from('b240', 'hex')
-exports['blake2s-8'] = Buffer.from('b241', 'hex')
-exports['blake2s-16'] = Buffer.from('b242', 'hex')
-exports['blake2s-24'] = Buffer.from('b243', 'hex')
-exports['blake2s-32'] = Buffer.from('b244', 'hex')
-exports['blake2s-40'] = Buffer.from('b245', 'hex')
-exports['blake2s-48'] = Buffer.from('b246', 'hex')
-exports['blake2s-56'] = Buffer.from('b247', 'hex')
-exports['blake2s-64'] = Buffer.from('b248', 'hex')
-exports['blake2s-72'] = Buffer.from('b249', 'hex')
-exports['blake2s-80'] = Buffer.from('b24a', 'hex')
-exports['blake2s-88'] = Buffer.from('b24b', 'hex')
-exports['blake2s-96'] = Buffer.from('b24c', 'hex')
-exports['blake2s-104'] = Buffer.from('b24d', 'hex')
-exports['blake2s-112'] = Buffer.from('b24e', 'hex')
-exports['blake2s-120'] = Buffer.from('b24f', 'hex')
-exports['blake2s-128'] = Buffer.from('b250', 'hex')
-exports['blake2s-136'] = Buffer.from('b251', 'hex')
-exports['blake2s-144'] = Buffer.from('b252', 'hex')
-exports['blake2s-152'] = Buffer.from('b253', 'hex')
-exports['blake2s-160'] = Buffer.from('b254', 'hex')
-exports['blake2s-168'] = Buffer.from('b255', 'hex')
-exports['blake2s-176'] = Buffer.from('b256', 'hex')
-exports['blake2s-184'] = Buffer.from('b257', 'hex')
-exports['blake2s-192'] = Buffer.from('b258', 'hex')
-exports['blake2s-200'] = Buffer.from('b259', 'hex')
-exports['blake2s-208'] = Buffer.from('b25a', 'hex')
-exports['blake2s-216'] = Buffer.from('b25b', 'hex')
-exports['blake2s-224'] = Buffer.from('b25c', 'hex')
-exports['blake2s-232'] = Buffer.from('b25d', 'hex')
-exports['blake2s-240'] = Buffer.from('b25e', 'hex')
-exports['blake2s-248'] = Buffer.from('b25f', 'hex')
-exports['blake2s-256'] = Buffer.from('b260', 'hex')
-exports['skein256-8'] = Buffer.from('b301', 'hex')
-exports['skein256-16'] = Buffer.from('b302', 'hex')
-exports['skein256-24'] = Buffer.from('b303', 'hex')
-exports['skein256-32'] = Buffer.from('b304', 'hex')
-exports['skein256-40'] = Buffer.from('b305', 'hex')
-exports['skein256-48'] = Buffer.from('b306', 'hex')
-exports['skein256-56'] = Buffer.from('b307', 'hex')
-exports['skein256-64'] = Buffer.from('b308', 'hex')
-exports['skein256-72'] = Buffer.from('b309', 'hex')
-exports['skein256-80'] = Buffer.from('b30a', 'hex')
-exports['skein256-88'] = Buffer.from('b30b', 'hex')
-exports['skein256-96'] = Buffer.from('b30c', 'hex')
-exports['skein256-104'] = Buffer.from('b30d', 'hex')
-exports['skein256-112'] = Buffer.from('b30e', 'hex')
-exports['skein256-120'] = Buffer.from('b30f', 'hex')
-exports['skein256-128'] = Buffer.from('b310', 'hex')
-exports['skein256-136'] = Buffer.from('b311', 'hex')
-exports['skein256-144'] = Buffer.from('b312', 'hex')
-exports['skein256-152'] = Buffer.from('b313', 'hex')
-exports['skein256-160'] = Buffer.from('b314', 'hex')
-exports['skein256-168'] = Buffer.from('b315', 'hex')
-exports['skein256-176'] = Buffer.from('b316', 'hex')
-exports['skein256-184'] = Buffer.from('b317', 'hex')
-exports['skein256-192'] = Buffer.from('b318', 'hex')
-exports['skein256-200'] = Buffer.from('b319', 'hex')
-exports['skein256-208'] = Buffer.from('b31a', 'hex')
-exports['skein256-216'] = Buffer.from('b31b', 'hex')
-exports['skein256-224'] = Buffer.from('b31c', 'hex')
-exports['skein256-232'] = Buffer.from('b31d', 'hex')
-exports['skein256-240'] = Buffer.from('b31e', 'hex')
-exports['skein256-248'] = Buffer.from('b31f', 'hex')
-exports['skein256-256'] = Buffer.from('b320', 'hex')
-exports['skein512-8'] = Buffer.from('b321', 'hex')
-exports['skein512-16'] = Buffer.from('b322', 'hex')
-exports['skein512-24'] = Buffer.from('b323', 'hex')
-exports['skein512-32'] = Buffer.from('b324', 'hex')
-exports['skein512-40'] = Buffer.from('b325', 'hex')
-exports['skein512-48'] = Buffer.from('b326', 'hex')
-exports['skein512-56'] = Buffer.from('b327', 'hex')
-exports['skein512-64'] = Buffer.from('b328', 'hex')
-exports['skein512-72'] = Buffer.from('b329', 'hex')
-exports['skein512-80'] = Buffer.from('b32a', 'hex')
-exports['skein512-88'] = Buffer.from('b32b', 'hex')
-exports['skein512-96'] = Buffer.from('b32c', 'hex')
-exports['skein512-104'] = Buffer.from('b32d', 'hex')
-exports['skein512-112'] = Buffer.from('b32e', 'hex')
-exports['skein512-120'] = Buffer.from('b32f', 'hex')
-exports['skein512-128'] = Buffer.from('b330', 'hex')
-exports['skein512-136'] = Buffer.from('b331', 'hex')
-exports['skein512-144'] = Buffer.from('b332', 'hex')
-exports['skein512-152'] = Buffer.from('b333', 'hex')
-exports['skein512-160'] = Buffer.from('b334', 'hex')
-exports['skein512-168'] = Buffer.from('b335', 'hex')
-exports['skein512-176'] = Buffer.from('b336', 'hex')
-exports['skein512-184'] = Buffer.from('b337', 'hex')
-exports['skein512-192'] = Buffer.from('b338', 'hex')
-exports['skein512-200'] = Buffer.from('b339', 'hex')
-exports['skein512-208'] = Buffer.from('b33a', 'hex')
-exports['skein512-216'] = Buffer.from('b33b', 'hex')
-exports['skein512-224'] = Buffer.from('b33c', 'hex')
-exports['skein512-232'] = Buffer.from('b33d', 'hex')
-exports['skein512-240'] = Buffer.from('b33e', 'hex')
-exports['skein512-248'] = Buffer.from('b33f', 'hex')
-exports['skein512-256'] = Buffer.from('b340', 'hex')
-exports['skein512-264'] = Buffer.from('b341', 'hex')
-exports['skein512-272'] = Buffer.from('b342', 'hex')
-exports['skein512-280'] = Buffer.from('b343', 'hex')
-exports['skein512-288'] = Buffer.from('b344', 'hex')
-exports['skein512-296'] = Buffer.from('b345', 'hex')
-exports['skein512-304'] = Buffer.from('b346', 'hex')
-exports['skein512-312'] = Buffer.from('b347', 'hex')
-exports['skein512-320'] = Buffer.from('b348', 'hex')
-exports['skein512-328'] = Buffer.from('b349', 'hex')
-exports['skein512-336'] = Buffer.from('b34a', 'hex')
-exports['skein512-344'] = Buffer.from('b34b', 'hex')
-exports['skein512-352'] = Buffer.from('b34c', 'hex')
-exports['skein512-360'] = Buffer.from('b34d', 'hex')
-exports['skein512-368'] = Buffer.from('b34e', 'hex')
-exports['skein512-376'] = Buffer.from('b34f', 'hex')
-exports['skein512-384'] = Buffer.from('b350', 'hex')
-exports['skein512-392'] = Buffer.from('b351', 'hex')
-exports['skein512-400'] = Buffer.from('b352', 'hex')
-exports['skein512-408'] = Buffer.from('b353', 'hex')
-exports['skein512-416'] = Buffer.from('b354', 'hex')
-exports['skein512-424'] = Buffer.from('b355', 'hex')
-exports['skein512-432'] = Buffer.from('b356', 'hex')
-exports['skein512-440'] = Buffer.from('b357', 'hex')
-exports['skein512-448'] = Buffer.from('b358', 'hex')
-exports['skein512-456'] = Buffer.from('b359', 'hex')
-exports['skein512-464'] = Buffer.from('b35a', 'hex')
-exports['skein512-472'] = Buffer.from('b35b', 'hex')
-exports['skein512-480'] = Buffer.from('b35c', 'hex')
-exports['skein512-488'] = Buffer.from('b35d', 'hex')
-exports['skein512-496'] = Buffer.from('b35e', 'hex')
-exports['skein512-504'] = Buffer.from('b35f', 'hex')
-exports['skein512-512'] = Buffer.from('b360', 'hex')
-exports['skein1024-8'] = Buffer.from('b361', 'hex')
-exports['skein1024-16'] = Buffer.from('b362', 'hex')
-exports['skein1024-24'] = Buffer.from('b363', 'hex')
-exports['skein1024-32'] = Buffer.from('b364', 'hex')
-exports['skein1024-40'] = Buffer.from('b365', 'hex')
-exports['skein1024-48'] = Buffer.from('b366', 'hex')
-exports['skein1024-56'] = Buffer.from('b367', 'hex')
-exports['skein1024-64'] = Buffer.from('b368', 'hex')
-exports['skein1024-72'] = Buffer.from('b369', 'hex')
-exports['skein1024-80'] = Buffer.from('b36a', 'hex')
-exports['skein1024-88'] = Buffer.from('b36b', 'hex')
-exports['skein1024-96'] = Buffer.from('b36c', 'hex')
-exports['skein1024-104'] = Buffer.from('b36d', 'hex')
-exports['skein1024-112'] = Buffer.from('b36e', 'hex')
-exports['skein1024-120'] = Buffer.from('b36f', 'hex')
-exports['skein1024-128'] = Buffer.from('b370', 'hex')
-exports['skein1024-136'] = Buffer.from('b371', 'hex')
-exports['skein1024-144'] = Buffer.from('b372', 'hex')
-exports['skein1024-152'] = Buffer.from('b373', 'hex')
-exports['skein1024-160'] = Buffer.from('b374', 'hex')
-exports['skein1024-168'] = Buffer.from('b375', 'hex')
-exports['skein1024-176'] = Buffer.from('b376', 'hex')
-exports['skein1024-184'] = Buffer.from('b377', 'hex')
-exports['skein1024-192'] = Buffer.from('b378', 'hex')
-exports['skein1024-200'] = Buffer.from('b379', 'hex')
-exports['skein1024-208'] = Buffer.from('b37a', 'hex')
-exports['skein1024-216'] = Buffer.from('b37b', 'hex')
-exports['skein1024-224'] = Buffer.from('b37c', 'hex')
-exports['skein1024-232'] = Buffer.from('b37d', 'hex')
-exports['skein1024-240'] = Buffer.from('b37e', 'hex')
-exports['skein1024-248'] = Buffer.from('b37f', 'hex')
-exports['skein1024-256'] = Buffer.from('b380', 'hex')
-exports['skein1024-264'] = Buffer.from('b381', 'hex')
-exports['skein1024-272'] = Buffer.from('b382', 'hex')
-exports['skein1024-280'] = Buffer.from('b383', 'hex')
-exports['skein1024-288'] = Buffer.from('b384', 'hex')
-exports['skein1024-296'] = Buffer.from('b385', 'hex')
-exports['skein1024-304'] = Buffer.from('b386', 'hex')
-exports['skein1024-312'] = Buffer.from('b387', 'hex')
-exports['skein1024-320'] = Buffer.from('b388', 'hex')
-exports['skein1024-328'] = Buffer.from('b389', 'hex')
-exports['skein1024-336'] = Buffer.from('b38a', 'hex')
-exports['skein1024-344'] = Buffer.from('b38b', 'hex')
-exports['skein1024-352'] = Buffer.from('b38c', 'hex')
-exports['skein1024-360'] = Buffer.from('b38d', 'hex')
-exports['skein1024-368'] = Buffer.from('b38e', 'hex')
-exports['skein1024-376'] = Buffer.from('b38f', 'hex')
-exports['skein1024-384'] = Buffer.from('b390', 'hex')
-exports['skein1024-392'] = Buffer.from('b391', 'hex')
-exports['skein1024-400'] = Buffer.from('b392', 'hex')
-exports['skein1024-408'] = Buffer.from('b393', 'hex')
-exports['skein1024-416'] = Buffer.from('b394', 'hex')
-exports['skein1024-424'] = Buffer.from('b395', 'hex')
-exports['skein1024-432'] = Buffer.from('b396', 'hex')
-exports['skein1024-440'] = Buffer.from('b397', 'hex')
-exports['skein1024-448'] = Buffer.from('b398', 'hex')
-exports['skein1024-456'] = Buffer.from('b399', 'hex')
-exports['skein1024-464'] = Buffer.from('b39a', 'hex')
-exports['skein1024-472'] = Buffer.from('b39b', 'hex')
-exports['skein1024-480'] = Buffer.from('b39c', 'hex')
-exports['skein1024-488'] = Buffer.from('b39d', 'hex')
-exports['skein1024-496'] = Buffer.from('b39e', 'hex')
-exports['skein1024-504'] = Buffer.from('b39f', 'hex')
-exports['skein1024-512'] = Buffer.from('b3a0', 'hex')
-exports['skein1024-520'] = Buffer.from('b3a1', 'hex')
-exports['skein1024-528'] = Buffer.from('b3a2', 'hex')
-exports['skein1024-536'] = Buffer.from('b3a3', 'hex')
-exports['skein1024-544'] = Buffer.from('b3a4', 'hex')
-exports['skein1024-552'] = Buffer.from('b3a5', 'hex')
-exports['skein1024-560'] = Buffer.from('b3a6', 'hex')
-exports['skein1024-568'] = Buffer.from('b3a7', 'hex')
-exports['skein1024-576'] = Buffer.from('b3a8', 'hex')
-exports['skein1024-584'] = Buffer.from('b3a9', 'hex')
-exports['skein1024-592'] = Buffer.from('b3aa', 'hex')
-exports['skein1024-600'] = Buffer.from('b3ab', 'hex')
-exports['skein1024-608'] = Buffer.from('b3ac', 'hex')
-exports['skein1024-616'] = Buffer.from('b3ad', 'hex')
-exports['skein1024-624'] = Buffer.from('b3ae', 'hex')
-exports['skein1024-632'] = Buffer.from('b3af', 'hex')
-exports['skein1024-640'] = Buffer.from('b3b0', 'hex')
-exports['skein1024-648'] = Buffer.from('b3b1', 'hex')
-exports['skein1024-656'] = Buffer.from('b3b2', 'hex')
-exports['skein1024-664'] = Buffer.from('b3b3', 'hex')
-exports['skein1024-672'] = Buffer.from('b3b4', 'hex')
-exports['skein1024-680'] = Buffer.from('b3b5', 'hex')
-exports['skein1024-688'] = Buffer.from('b3b6', 'hex')
-exports['skein1024-696'] = Buffer.from('b3b7', 'hex')
-exports['skein1024-704'] = Buffer.from('b3b8', 'hex')
-exports['skein1024-712'] = Buffer.from('b3b9', 'hex')
-exports['skein1024-720'] = Buffer.from('b3ba', 'hex')
-exports['skein1024-728'] = Buffer.from('b3bb', 'hex')
-exports['skein1024-736'] = Buffer.from('b3bc', 'hex')
-exports['skein1024-744'] = Buffer.from('b3bd', 'hex')
-exports['skein1024-752'] = Buffer.from('b3be', 'hex')
-exports['skein1024-760'] = Buffer.from('b3bf', 'hex')
-exports['skein1024-768'] = Buffer.from('b3c0', 'hex')
-exports['skein1024-776'] = Buffer.from('b3c1', 'hex')
-exports['skein1024-784'] = Buffer.from('b3c2', 'hex')
-exports['skein1024-792'] = Buffer.from('b3c3', 'hex')
-exports['skein1024-800'] = Buffer.from('b3c4', 'hex')
-exports['skein1024-808'] = Buffer.from('b3c5', 'hex')
-exports['skein1024-816'] = Buffer.from('b3c6', 'hex')
-exports['skein1024-824'] = Buffer.from('b3c7', 'hex')
-exports['skein1024-832'] = Buffer.from('b3c8', 'hex')
-exports['skein1024-840'] = Buffer.from('b3c9', 'hex')
-exports['skein1024-848'] = Buffer.from('b3ca', 'hex')
-exports['skein1024-856'] = Buffer.from('b3cb', 'hex')
-exports['skein1024-864'] = Buffer.from('b3cc', 'hex')
-exports['skein1024-872'] = Buffer.from('b3cd', 'hex')
-exports['skein1024-880'] = Buffer.from('b3ce', 'hex')
-exports['skein1024-888'] = Buffer.from('b3cf', 'hex')
-exports['skein1024-896'] = Buffer.from('b3d0', 'hex')
-exports['skein1024-904'] = Buffer.from('b3d1', 'hex')
-exports['skein1024-912'] = Buffer.from('b3d2', 'hex')
-exports['skein1024-920'] = Buffer.from('b3d3', 'hex')
-exports['skein1024-928'] = Buffer.from('b3d4', 'hex')
-exports['skein1024-936'] = Buffer.from('b3d5', 'hex')
-exports['skein1024-944'] = Buffer.from('b3d6', 'hex')
-exports['skein1024-952'] = Buffer.from('b3d7', 'hex')
-exports['skein1024-960'] = Buffer.from('b3d8', 'hex')
-exports['skein1024-968'] = Buffer.from('b3d9', 'hex')
-exports['skein1024-976'] = Buffer.from('b3da', 'hex')
-exports['skein1024-984'] = Buffer.from('b3db', 'hex')
-exports['skein1024-992'] = Buffer.from('b3dc', 'hex')
-exports['skein1024-1000'] = Buffer.from('b3dd', 'hex')
-exports['skein1024-1008'] = Buffer.from('b3de', 'hex')
-exports['skein1024-1016'] = Buffer.from('b3df', 'hex')
-exports['skein1024-1024'] = Buffer.from('b3e0', 'hex')
-
-// multiaddr
-exports['ip4'] = Buffer.from('04', 'hex')
-exports['tcp'] = Buffer.from('06', 'hex')
-exports['dccp'] = Buffer.from('21', 'hex')
-exports['ip6'] = Buffer.from('29', 'hex')
-exports['ip6zone'] = Buffer.from('2a', 'hex')
-exports['dns'] = Buffer.from('35', 'hex')
-exports['dns4'] = Buffer.from('36', 'hex')
-exports['dns6'] = Buffer.from('37', 'hex')
-exports['dnsaddr'] = Buffer.from('38', 'hex')
-exports['sctp'] = Buffer.from('84', 'hex')
-exports['udp'] = Buffer.from('0111', 'hex')
-exports['p2p-webrtc-star'] = Buffer.from('0113', 'hex')
-exports['p2p-webrtc-direct'] = Buffer.from('0114', 'hex')
-exports['p2p-stardust'] = Buffer.from('0115', 'hex')
-exports['p2p-circuit'] = Buffer.from('0122', 'hex')
-exports['udt'] = Buffer.from('012d', 'hex')
-exports['utp'] = Buffer.from('012e', 'hex')
-exports['unix'] = Buffer.from('0190', 'hex')
-exports['p2p'] = Buffer.from('01a5', 'hex')
-exports['ipfs'] = Buffer.from('01a5', 'hex')
-exports['https'] = Buffer.from('01bb', 'hex')
-exports['onion'] = Buffer.from('01bc', 'hex')
-exports['onion3'] = Buffer.from('01bd', 'hex')
-exports['garlic64'] = Buffer.from('01be', 'hex')
-exports['garlic32'] = Buffer.from('01bf', 'hex')
-exports['quic'] = Buffer.from('01cc', 'hex')
-exports['ws'] = Buffer.from('01dd', 'hex')
-exports['wss'] = Buffer.from('01de', 'hex')
-exports['p2p-websocket-star'] = Buffer.from('01df', 'hex')
-exports['http'] = Buffer.from('01e0', 'hex')
-
-// ipld
-exports['raw'] = Buffer.from('55', 'hex')
-exports['dag-pb'] = Buffer.from('70', 'hex')
-exports['dag-cbor'] = Buffer.from('71', 'hex')
-exports['libp2p-key'] = Buffer.from('72', 'hex')
-exports['git-raw'] = Buffer.from('78', 'hex')
-exports['torrent-info'] = Buffer.from('7b', 'hex')
-exports['torrent-file'] = Buffer.from('7c', 'hex')
-exports['leofcoin-block'] = Buffer.from('81', 'hex')
-exports['leofcoin-tx'] = Buffer.from('82', 'hex')
-exports['leofcoin-pr'] = Buffer.from('83', 'hex')
-exports['eth-block'] = Buffer.from('90', 'hex')
-exports['eth-block-list'] = Buffer.from('91', 'hex')
-exports['eth-tx-trie'] = Buffer.from('92', 'hex')
-exports['eth-tx'] = Buffer.from('93', 'hex')
-exports['eth-tx-receipt-trie'] = Buffer.from('94', 'hex')
-exports['eth-tx-receipt'] = Buffer.from('95', 'hex')
-exports['eth-state-trie'] = Buffer.from('96', 'hex')
-exports['eth-account-snapshot'] = Buffer.from('97', 'hex')
-exports['eth-storage-trie'] = Buffer.from('98', 'hex')
-exports['bitcoin-block'] = Buffer.from('b0', 'hex')
-exports['bitcoin-tx'] = Buffer.from('b1', 'hex')
-exports['zcash-block'] = Buffer.from('c0', 'hex')
-exports['zcash-tx'] = Buffer.from('c1', 'hex')
-exports['stellar-block'] = Buffer.from('d0', 'hex')
-exports['stellar-tx'] = Buffer.from('d1', 'hex')
-exports['decred-block'] = Buffer.from('e0', 'hex')
-exports['decred-tx'] = Buffer.from('e1', 'hex')
-exports['dash-block'] = Buffer.from('f0', 'hex')
-exports['dash-tx'] = Buffer.from('f1', 'hex')
-exports['swarm-manifest'] = Buffer.from('fa', 'hex')
-exports['swarm-feed'] = Buffer.from('fb', 'hex')
-exports['dag-json'] = Buffer.from('0129', 'hex')
-
-// namespace
-exports['path'] = Buffer.from('2f', 'hex')
-exports['ipld-ns'] = Buffer.from('e2', 'hex')
-exports['ipfs-ns'] = Buffer.from('e3', 'hex')
-exports['swarm-ns'] = Buffer.from('e4', 'hex')
-exports['ipns-ns'] = Buffer.from('e5', 'hex')
-exports['zeronet'] = Buffer.from('e6', 'hex')
-
-// key
-exports['ed25519-pub'] = Buffer.from('ed', 'hex')
-
-// holochain
-exports['holochain-adr-v0'] = Buffer.from('807124', 'hex')
-exports['holochain-adr-v1'] = Buffer.from('817124', 'hex')
-exports['holochain-key-v0'] = Buffer.from('947124', 'hex')
-exports['holochain-key-v1'] = Buffer.from('957124', 'hex')
-exports['holochain-sig-v0'] = Buffer.from('a27124', 'hex')
-exports['holochain-sig-v1'] = Buffer.from('a37124', 'hex')
-
-}).call(this,require("buffer").Buffer)
-},{"buffer":4}],17:[function(require,module,exports){
-// THIS FILE IS GENERATED, DO NO EDIT MANUALLY
-// For more information see the README.md
-/* eslint-disable dot-notation */
-'use strict'
-module.exports = Object.freeze({
-
-  // serialization
-  PROTOBUF: 0x50,
-  CBOR: 0x51,
-  RLP: 0x60,
-  BENCODE: 0x63,
-  JSON: 0x0200,
-  MESSAGEPACK: 0x0201,
-
-  // multiformat
-  MULTICODEC: 0x30,
-  MULTIHASH: 0x31,
-  MULTIADDR: 0x32,
-  MULTIBASE: 0x33,
-
-  // multihash
-  IDENTITY: 0x00,
-  SHA1: 0x11,
-  SHA2_256: 0x12,
-  SHA2_512: 0x13,
-  SHA3_512: 0x14,
-  SHA3_384: 0x15,
-  SHA3_256: 0x16,
-  SHA3_224: 0x17,
-  SHAKE_128: 0x18,
-  SHAKE_256: 0x19,
-  KECCAK_224: 0x1a,
-  KECCAK_256: 0x1b,
-  KECCAK_384: 0x1c,
-  KECCAK_512: 0x1d,
-  MURMUR3_128: 0x22,
-  MURMUR3_32: 0x23,
-  DBL_SHA2_256: 0x56,
-  MD4: 0xd4,
-  MD5: 0xd5,
-  BMT: 0xd6,
-  X11: 0x1100,
-  BLAKE2B_8: 0xb201,
-  BLAKE2B_16: 0xb202,
-  BLAKE2B_24: 0xb203,
-  BLAKE2B_32: 0xb204,
-  BLAKE2B_40: 0xb205,
-  BLAKE2B_48: 0xb206,
-  BLAKE2B_56: 0xb207,
-  BLAKE2B_64: 0xb208,
-  BLAKE2B_72: 0xb209,
-  BLAKE2B_80: 0xb20a,
-  BLAKE2B_88: 0xb20b,
-  BLAKE2B_96: 0xb20c,
-  BLAKE2B_104: 0xb20d,
-  BLAKE2B_112: 0xb20e,
-  BLAKE2B_120: 0xb20f,
-  BLAKE2B_128: 0xb210,
-  BLAKE2B_136: 0xb211,
-  BLAKE2B_144: 0xb212,
-  BLAKE2B_152: 0xb213,
-  BLAKE2B_160: 0xb214,
-  BLAKE2B_168: 0xb215,
-  BLAKE2B_176: 0xb216,
-  BLAKE2B_184: 0xb217,
-  BLAKE2B_192: 0xb218,
-  BLAKE2B_200: 0xb219,
-  BLAKE2B_208: 0xb21a,
-  BLAKE2B_216: 0xb21b,
-  BLAKE2B_224: 0xb21c,
-  BLAKE2B_232: 0xb21d,
-  BLAKE2B_240: 0xb21e,
-  BLAKE2B_248: 0xb21f,
-  BLAKE2B_256: 0xb220,
-  BLAKE2B_264: 0xb221,
-  BLAKE2B_272: 0xb222,
-  BLAKE2B_280: 0xb223,
-  BLAKE2B_288: 0xb224,
-  BLAKE2B_296: 0xb225,
-  BLAKE2B_304: 0xb226,
-  BLAKE2B_312: 0xb227,
-  BLAKE2B_320: 0xb228,
-  BLAKE2B_328: 0xb229,
-  BLAKE2B_336: 0xb22a,
-  BLAKE2B_344: 0xb22b,
-  BLAKE2B_352: 0xb22c,
-  BLAKE2B_360: 0xb22d,
-  BLAKE2B_368: 0xb22e,
-  BLAKE2B_376: 0xb22f,
-  BLAKE2B_384: 0xb230,
-  BLAKE2B_392: 0xb231,
-  BLAKE2B_400: 0xb232,
-  BLAKE2B_408: 0xb233,
-  BLAKE2B_416: 0xb234,
-  BLAKE2B_424: 0xb235,
-  BLAKE2B_432: 0xb236,
-  BLAKE2B_440: 0xb237,
-  BLAKE2B_448: 0xb238,
-  BLAKE2B_456: 0xb239,
-  BLAKE2B_464: 0xb23a,
-  BLAKE2B_472: 0xb23b,
-  BLAKE2B_480: 0xb23c,
-  BLAKE2B_488: 0xb23d,
-  BLAKE2B_496: 0xb23e,
-  BLAKE2B_504: 0xb23f,
-  BLAKE2B_512: 0xb240,
-  BLAKE2S_8: 0xb241,
-  BLAKE2S_16: 0xb242,
-  BLAKE2S_24: 0xb243,
-  BLAKE2S_32: 0xb244,
-  BLAKE2S_40: 0xb245,
-  BLAKE2S_48: 0xb246,
-  BLAKE2S_56: 0xb247,
-  BLAKE2S_64: 0xb248,
-  BLAKE2S_72: 0xb249,
-  BLAKE2S_80: 0xb24a,
-  BLAKE2S_88: 0xb24b,
-  BLAKE2S_96: 0xb24c,
-  BLAKE2S_104: 0xb24d,
-  BLAKE2S_112: 0xb24e,
-  BLAKE2S_120: 0xb24f,
-  BLAKE2S_128: 0xb250,
-  BLAKE2S_136: 0xb251,
-  BLAKE2S_144: 0xb252,
-  BLAKE2S_152: 0xb253,
-  BLAKE2S_160: 0xb254,
-  BLAKE2S_168: 0xb255,
-  BLAKE2S_176: 0xb256,
-  BLAKE2S_184: 0xb257,
-  BLAKE2S_192: 0xb258,
-  BLAKE2S_200: 0xb259,
-  BLAKE2S_208: 0xb25a,
-  BLAKE2S_216: 0xb25b,
-  BLAKE2S_224: 0xb25c,
-  BLAKE2S_232: 0xb25d,
-  BLAKE2S_240: 0xb25e,
-  BLAKE2S_248: 0xb25f,
-  BLAKE2S_256: 0xb260,
-  SKEIN256_8: 0xb301,
-  SKEIN256_16: 0xb302,
-  SKEIN256_24: 0xb303,
-  SKEIN256_32: 0xb304,
-  SKEIN256_40: 0xb305,
-  SKEIN256_48: 0xb306,
-  SKEIN256_56: 0xb307,
-  SKEIN256_64: 0xb308,
-  SKEIN256_72: 0xb309,
-  SKEIN256_80: 0xb30a,
-  SKEIN256_88: 0xb30b,
-  SKEIN256_96: 0xb30c,
-  SKEIN256_104: 0xb30d,
-  SKEIN256_112: 0xb30e,
-  SKEIN256_120: 0xb30f,
-  SKEIN256_128: 0xb310,
-  SKEIN256_136: 0xb311,
-  SKEIN256_144: 0xb312,
-  SKEIN256_152: 0xb313,
-  SKEIN256_160: 0xb314,
-  SKEIN256_168: 0xb315,
-  SKEIN256_176: 0xb316,
-  SKEIN256_184: 0xb317,
-  SKEIN256_192: 0xb318,
-  SKEIN256_200: 0xb319,
-  SKEIN256_208: 0xb31a,
-  SKEIN256_216: 0xb31b,
-  SKEIN256_224: 0xb31c,
-  SKEIN256_232: 0xb31d,
-  SKEIN256_240: 0xb31e,
-  SKEIN256_248: 0xb31f,
-  SKEIN256_256: 0xb320,
-  SKEIN512_8: 0xb321,
-  SKEIN512_16: 0xb322,
-  SKEIN512_24: 0xb323,
-  SKEIN512_32: 0xb324,
-  SKEIN512_40: 0xb325,
-  SKEIN512_48: 0xb326,
-  SKEIN512_56: 0xb327,
-  SKEIN512_64: 0xb328,
-  SKEIN512_72: 0xb329,
-  SKEIN512_80: 0xb32a,
-  SKEIN512_88: 0xb32b,
-  SKEIN512_96: 0xb32c,
-  SKEIN512_104: 0xb32d,
-  SKEIN512_112: 0xb32e,
-  SKEIN512_120: 0xb32f,
-  SKEIN512_128: 0xb330,
-  SKEIN512_136: 0xb331,
-  SKEIN512_144: 0xb332,
-  SKEIN512_152: 0xb333,
-  SKEIN512_160: 0xb334,
-  SKEIN512_168: 0xb335,
-  SKEIN512_176: 0xb336,
-  SKEIN512_184: 0xb337,
-  SKEIN512_192: 0xb338,
-  SKEIN512_200: 0xb339,
-  SKEIN512_208: 0xb33a,
-  SKEIN512_216: 0xb33b,
-  SKEIN512_224: 0xb33c,
-  SKEIN512_232: 0xb33d,
-  SKEIN512_240: 0xb33e,
-  SKEIN512_248: 0xb33f,
-  SKEIN512_256: 0xb340,
-  SKEIN512_264: 0xb341,
-  SKEIN512_272: 0xb342,
-  SKEIN512_280: 0xb343,
-  SKEIN512_288: 0xb344,
-  SKEIN512_296: 0xb345,
-  SKEIN512_304: 0xb346,
-  SKEIN512_312: 0xb347,
-  SKEIN512_320: 0xb348,
-  SKEIN512_328: 0xb349,
-  SKEIN512_336: 0xb34a,
-  SKEIN512_344: 0xb34b,
-  SKEIN512_352: 0xb34c,
-  SKEIN512_360: 0xb34d,
-  SKEIN512_368: 0xb34e,
-  SKEIN512_376: 0xb34f,
-  SKEIN512_384: 0xb350,
-  SKEIN512_392: 0xb351,
-  SKEIN512_400: 0xb352,
-  SKEIN512_408: 0xb353,
-  SKEIN512_416: 0xb354,
-  SKEIN512_424: 0xb355,
-  SKEIN512_432: 0xb356,
-  SKEIN512_440: 0xb357,
-  SKEIN512_448: 0xb358,
-  SKEIN512_456: 0xb359,
-  SKEIN512_464: 0xb35a,
-  SKEIN512_472: 0xb35b,
-  SKEIN512_480: 0xb35c,
-  SKEIN512_488: 0xb35d,
-  SKEIN512_496: 0xb35e,
-  SKEIN512_504: 0xb35f,
-  SKEIN512_512: 0xb360,
-  SKEIN1024_8: 0xb361,
-  SKEIN1024_16: 0xb362,
-  SKEIN1024_24: 0xb363,
-  SKEIN1024_32: 0xb364,
-  SKEIN1024_40: 0xb365,
-  SKEIN1024_48: 0xb366,
-  SKEIN1024_56: 0xb367,
-  SKEIN1024_64: 0xb368,
-  SKEIN1024_72: 0xb369,
-  SKEIN1024_80: 0xb36a,
-  SKEIN1024_88: 0xb36b,
-  SKEIN1024_96: 0xb36c,
-  SKEIN1024_104: 0xb36d,
-  SKEIN1024_112: 0xb36e,
-  SKEIN1024_120: 0xb36f,
-  SKEIN1024_128: 0xb370,
-  SKEIN1024_136: 0xb371,
-  SKEIN1024_144: 0xb372,
-  SKEIN1024_152: 0xb373,
-  SKEIN1024_160: 0xb374,
-  SKEIN1024_168: 0xb375,
-  SKEIN1024_176: 0xb376,
-  SKEIN1024_184: 0xb377,
-  SKEIN1024_192: 0xb378,
-  SKEIN1024_200: 0xb379,
-  SKEIN1024_208: 0xb37a,
-  SKEIN1024_216: 0xb37b,
-  SKEIN1024_224: 0xb37c,
-  SKEIN1024_232: 0xb37d,
-  SKEIN1024_240: 0xb37e,
-  SKEIN1024_248: 0xb37f,
-  SKEIN1024_256: 0xb380,
-  SKEIN1024_264: 0xb381,
-  SKEIN1024_272: 0xb382,
-  SKEIN1024_280: 0xb383,
-  SKEIN1024_288: 0xb384,
-  SKEIN1024_296: 0xb385,
-  SKEIN1024_304: 0xb386,
-  SKEIN1024_312: 0xb387,
-  SKEIN1024_320: 0xb388,
-  SKEIN1024_328: 0xb389,
-  SKEIN1024_336: 0xb38a,
-  SKEIN1024_344: 0xb38b,
-  SKEIN1024_352: 0xb38c,
-  SKEIN1024_360: 0xb38d,
-  SKEIN1024_368: 0xb38e,
-  SKEIN1024_376: 0xb38f,
-  SKEIN1024_384: 0xb390,
-  SKEIN1024_392: 0xb391,
-  SKEIN1024_400: 0xb392,
-  SKEIN1024_408: 0xb393,
-  SKEIN1024_416: 0xb394,
-  SKEIN1024_424: 0xb395,
-  SKEIN1024_432: 0xb396,
-  SKEIN1024_440: 0xb397,
-  SKEIN1024_448: 0xb398,
-  SKEIN1024_456: 0xb399,
-  SKEIN1024_464: 0xb39a,
-  SKEIN1024_472: 0xb39b,
-  SKEIN1024_480: 0xb39c,
-  SKEIN1024_488: 0xb39d,
-  SKEIN1024_496: 0xb39e,
-  SKEIN1024_504: 0xb39f,
-  SKEIN1024_512: 0xb3a0,
-  SKEIN1024_520: 0xb3a1,
-  SKEIN1024_528: 0xb3a2,
-  SKEIN1024_536: 0xb3a3,
-  SKEIN1024_544: 0xb3a4,
-  SKEIN1024_552: 0xb3a5,
-  SKEIN1024_560: 0xb3a6,
-  SKEIN1024_568: 0xb3a7,
-  SKEIN1024_576: 0xb3a8,
-  SKEIN1024_584: 0xb3a9,
-  SKEIN1024_592: 0xb3aa,
-  SKEIN1024_600: 0xb3ab,
-  SKEIN1024_608: 0xb3ac,
-  SKEIN1024_616: 0xb3ad,
-  SKEIN1024_624: 0xb3ae,
-  SKEIN1024_632: 0xb3af,
-  SKEIN1024_640: 0xb3b0,
-  SKEIN1024_648: 0xb3b1,
-  SKEIN1024_656: 0xb3b2,
-  SKEIN1024_664: 0xb3b3,
-  SKEIN1024_672: 0xb3b4,
-  SKEIN1024_680: 0xb3b5,
-  SKEIN1024_688: 0xb3b6,
-  SKEIN1024_696: 0xb3b7,
-  SKEIN1024_704: 0xb3b8,
-  SKEIN1024_712: 0xb3b9,
-  SKEIN1024_720: 0xb3ba,
-  SKEIN1024_728: 0xb3bb,
-  SKEIN1024_736: 0xb3bc,
-  SKEIN1024_744: 0xb3bd,
-  SKEIN1024_752: 0xb3be,
-  SKEIN1024_760: 0xb3bf,
-  SKEIN1024_768: 0xb3c0,
-  SKEIN1024_776: 0xb3c1,
-  SKEIN1024_784: 0xb3c2,
-  SKEIN1024_792: 0xb3c3,
-  SKEIN1024_800: 0xb3c4,
-  SKEIN1024_808: 0xb3c5,
-  SKEIN1024_816: 0xb3c6,
-  SKEIN1024_824: 0xb3c7,
-  SKEIN1024_832: 0xb3c8,
-  SKEIN1024_840: 0xb3c9,
-  SKEIN1024_848: 0xb3ca,
-  SKEIN1024_856: 0xb3cb,
-  SKEIN1024_864: 0xb3cc,
-  SKEIN1024_872: 0xb3cd,
-  SKEIN1024_880: 0xb3ce,
-  SKEIN1024_888: 0xb3cf,
-  SKEIN1024_896: 0xb3d0,
-  SKEIN1024_904: 0xb3d1,
-  SKEIN1024_912: 0xb3d2,
-  SKEIN1024_920: 0xb3d3,
-  SKEIN1024_928: 0xb3d4,
-  SKEIN1024_936: 0xb3d5,
-  SKEIN1024_944: 0xb3d6,
-  SKEIN1024_952: 0xb3d7,
-  SKEIN1024_960: 0xb3d8,
-  SKEIN1024_968: 0xb3d9,
-  SKEIN1024_976: 0xb3da,
-  SKEIN1024_984: 0xb3db,
-  SKEIN1024_992: 0xb3dc,
-  SKEIN1024_1000: 0xb3dd,
-  SKEIN1024_1008: 0xb3de,
-  SKEIN1024_1016: 0xb3df,
-  SKEIN1024_1024: 0xb3e0,
-
-  // multiaddr
-  IP4: 0x04,
-  TCP: 0x06,
-  DCCP: 0x21,
-  IP6: 0x29,
-  IP6ZONE: 0x2a,
-  DNS: 0x35,
-  DNS4: 0x36,
-  DNS6: 0x37,
-  DNSADDR: 0x38,
-  SCTP: 0x84,
-  UDP: 0x0111,
-  P2P_WEBRTC_STAR: 0x0113,
-  P2P_WEBRTC_DIRECT: 0x0114,
-  P2P_STARDUST: 0x0115,
-  P2P_CIRCUIT: 0x0122,
-  UDT: 0x012d,
-  UTP: 0x012e,
-  UNIX: 0x0190,
-  P2P: 0x01a5,
-  IPFS: 0x01a5,
-  HTTPS: 0x01bb,
-  ONION: 0x01bc,
-  ONION3: 0x01bd,
-  GARLIC64: 0x01be,
-  GARLIC32: 0x01bf,
-  QUIC: 0x01cc,
-  WS: 0x01dd,
-  WSS: 0x01de,
-  P2P_WEBSOCKET_STAR: 0x01df,
-  HTTP: 0x01e0,
-
-  // ipld
-  RAW: 0x55,
-  DAG_PB: 0x70,
-  DAG_CBOR: 0x71,
-  LIBP2P_KEY: 0x72,
-  GIT_RAW: 0x78,
-  TORRENT_INFO: 0x7b,
-  TORRENT_FILE: 0x7c,
-  LEOFCOIN_BLOCK: 0x81,
-  LEOFCOIN_TX: 0x82,
-  LEOFCOIN_PR: 0x83,
-  ETH_BLOCK: 0x90,
-  ETH_BLOCK_LIST: 0x91,
-  ETH_TX_TRIE: 0x92,
-  ETH_TX: 0x93,
-  ETH_TX_RECEIPT_TRIE: 0x94,
-  ETH_TX_RECEIPT: 0x95,
-  ETH_STATE_TRIE: 0x96,
-  ETH_ACCOUNT_SNAPSHOT: 0x97,
-  ETH_STORAGE_TRIE: 0x98,
-  BITCOIN_BLOCK: 0xb0,
-  BITCOIN_TX: 0xb1,
-  ZCASH_BLOCK: 0xc0,
-  ZCASH_TX: 0xc1,
-  STELLAR_BLOCK: 0xd0,
-  STELLAR_TX: 0xd1,
-  DECRED_BLOCK: 0xe0,
-  DECRED_TX: 0xe1,
-  DASH_BLOCK: 0xf0,
-  DASH_TX: 0xf1,
-  SWARM_MANIFEST: 0xfa,
-  SWARM_FEED: 0xfb,
-  DAG_JSON: 0x0129,
-
-  // namespace
-  PATH: 0x2f,
-  IPLD_NS: 0xe2,
-  IPFS_NS: 0xe3,
-  SWARM_NS: 0xe4,
-  IPNS_NS: 0xe5,
-  ZERONET: 0xe6,
-
-  // key
-  ED25519_PUB: 0xed,
-
-  // holochain
-  HOLOCHAIN_ADR_V0: 0x807124,
-  HOLOCHAIN_ADR_V1: 0x817124,
-  HOLOCHAIN_KEY_V0: 0x947124,
-  HOLOCHAIN_KEY_V1: 0x957124,
-  HOLOCHAIN_SIG_V0: 0xa27124,
-  HOLOCHAIN_SIG_V1: 0xa37124
-})
-
-},{}],18:[function(require,module,exports){
-(function (Buffer){
 /**
- * Implementation of the multicodec specification.
+ * Get encoding from data
  *
- * @module multicodec
- * @example
- * const multicodec = require('multicodec')
- *
- * const prefixedProtobuf = multicodec.addPrefix('protobuf', protobufBuffer)
- * // prefixedProtobuf 0x50...
- *
+ * @param {string|Buffer} data
+ * @returns {Base}
+ * @throws {Error} Will throw if the encoding is not supported
  */
+function encodingFromData (data) {
+  if (Buffer.isBuffer(data)) {
+    data = data.toString()
+  }
+
+  return encoding(data[0])
+}
+
+exports = module.exports = multibase
+exports.encode = encode
+exports.decode = decode
+exports.isEncoded = isEncoded
+exports.encoding = encoding
+exports.encodingFromData = encodingFromData
+exports.names = Object.freeze(constants.names)
+exports.codes = Object.freeze(constants.codes)
+
+},{"./constants":19,"buffer":3}],21:[function(require,module,exports){
 'use strict'
 
-const varint = require('varint')
-const codecNameToCodeVarint = require('./varint-table')
-const codeToCodecName = require('./name-table')
-const util = require('./util')
+const decode = (string, alphabet, bitsPerChar) => {
+  // Build the character lookup table:
+  const codes = {}
+  for (let i = 0; i < alphabet.length; ++i) {
+    codes[alphabet[i]] = i
+  }
 
-exports = module.exports
+  // Count the padding bytes:
+  let end = string.length
+  while (string[end - 1] === '=') {
+    --end
+  }
 
-/**
- * Prefix a buffer with a multicodec-packed.
- *
- * @param {string|number} multicodecStrOrCode
- * @param {Buffer} data
- * @returns {Buffer}
- */
-exports.addPrefix = (multicodecStrOrCode, data) => {
-  let prefix
+  // Allocate the output:
+  const out = new Uint8Array((end * bitsPerChar / 8) | 0)
 
-  if (Buffer.isBuffer(multicodecStrOrCode)) {
-    prefix = util.varintBufferEncode(multicodecStrOrCode)
-  } else {
-    if (codecNameToCodeVarint[multicodecStrOrCode]) {
-      prefix = codecNameToCodeVarint[multicodecStrOrCode]
-    } else {
-      throw new Error('multicodec not recognized')
+  // Parse the data:
+  let bits = 0 // Number of bits currently in the buffer
+  let buffer = 0 // Bits waiting to be written out, MSB first
+  let written = 0 // Next byte to write
+  for (let i = 0; i < end; ++i) {
+    // Read one character from the string:
+    const value = codes[string[i]]
+    if (value === undefined) {
+      throw new SyntaxError('Invalid character ' + string[i])
+    }
+
+    // Append the bits to the buffer:
+    buffer = (buffer << bitsPerChar) | value
+    bits += bitsPerChar
+
+    // Write out some bits if the buffer has a byte's worth:
+    if (bits >= 8) {
+      bits -= 8
+      out[written++] = 0xff & (buffer >> bits)
     }
   }
-  return Buffer.concat([prefix, data])
+
+  // Verify that we have received just enough bits:
+  if (bits >= bitsPerChar || 0xff & (buffer << (8 - bits))) {
+    throw new SyntaxError('Unexpected end of data')
+  }
+
+  return out
 }
 
+const encode = (data, alphabet, bitsPerChar) => {
+  const pad = alphabet[alphabet.length - 1] === '='
+  const mask = (1 << bitsPerChar) - 1
+  let out = ''
+
+  let bits = 0 // Number of bits currently in the buffer
+  let buffer = 0 // Bits waiting to be written out, MSB first
+  for (let i = 0; i < data.length; ++i) {
+    // Slurp data into the buffer:
+    buffer = (buffer << 8) | data[i]
+    bits += 8
+
+    // Write out as much as we can:
+    while (bits > bitsPerChar) {
+      bits -= bitsPerChar
+      out += alphabet[mask & (buffer >> bits)]
+    }
+  }
+
+  // Partial character:
+  if (bits) {
+    out += alphabet[mask & (buffer << (bitsPerChar - bits))]
+  }
+
+  // Add padding characters until we hit a byte boundary:
+  if (pad) {
+    while ((out.length * bitsPerChar) & 7) {
+      out += '='
+    }
+  }
+
+  return out
+}
+
+module.exports = (bitsPerChar) => (alphabet) => {
+  return {
+    encode (input) {
+      return encode(input, alphabet, bitsPerChar)
+    },
+    decode (input) {
+      return decode(input, alphabet, bitsPerChar)
+    }
+  }
+}
+
+},{}],22:[function(require,module,exports){
+arguments[4][4][0].apply(exports,arguments)
+},{"dup":4}],23:[function(require,module,exports){
+arguments[4][5][0].apply(exports,arguments)
+},{"./base-table.json":22,"dup":5}],24:[function(require,module,exports){
+arguments[4][6][0].apply(exports,arguments)
+},{"./constants":23,"./int-table":25,"./print":26,"./util":27,"./varint-table":28,"buffer":3,"dup":6,"varint":39}],25:[function(require,module,exports){
+arguments[4][7][0].apply(exports,arguments)
+},{"./base-table.json":22,"dup":7}],26:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"./base-table.json":22,"dup":8}],27:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"buffer":3,"dup":9,"varint":39}],28:[function(require,module,exports){
+arguments[4][10][0].apply(exports,arguments)
+},{"./base-table.json":22,"./util":27,"dup":10}],29:[function(require,module,exports){
+// @ts-check
+'use strict'
+const { Buffer } = require('buffer')
+
 /**
- * Decapsulate the multicodec-packed prefix from the data.
+ * @typedef {Object} Codec
+ * @property {function(Uint8Array):string} encode
+ * @property {function(string):Uint8Array} decode
  *
- * @param {Buffer} data
- * @returns {Buffer}
+ * @typedef {function(string):Codec} CodecFactory
  */
-exports.rmPrefix = (data) => {
-  varint.decode(data)
-  return data.slice(varint.decode.bytes)
-}
 
-/**
- * Get the codec of the prefixed data.
- * @param {Buffer} prefixedData
- * @returns {string}
- */
-exports.getCodec = (prefixedData) => {
-  const code = util.varintBufferDecode(prefixedData)
-  const codecName = codeToCodecName[code.toString('hex')]
-  if (codecName === undefined) {
-    throw new Error('Code `0x' + code.toString('hex') + '` not found')
+class Base {
+  /**
+   * @param {string} name
+   * @param {string} code
+   * @param {CodecFactory} implementation
+   * @param {string} alphabet
+   */
+  constructor (name, code, implementation, alphabet) {
+    this.name = name
+    this.code = code
+    this.codeBuf = Buffer.from(this.code)
+    this.alphabet = alphabet
+    this.engine = implementation(alphabet)
   }
-  return codecName
-}
 
-/**
- * Get the name of the codec.
- * @param {number} codec
- * @returns {string}
- */
-exports.getName = (codec) => {
-  return codeToCodecName[codec.toString(16)]
-}
-
-/**
- * Get the code of the codec
- * @param {string} name
- * @returns {number}
- */
-exports.getNumber = (name) => {
-  const code = codecNameToCodeVarint[name]
-  if (code === undefined) {
-    throw new Error('Codec `' + name + '` not found')
+  /**
+   * @param {Uint8Array} buf
+   * @returns {string}
+   */
+  encode (buf) {
+    return this.engine.encode(buf)
   }
-  return util.varintBufferDecode(code)[0]
-}
 
-/**
- * Get the code of the prefixed data.
- * @param {Buffer} prefixedData
- * @returns {number}
- */
-exports.getCode = (prefixedData) => {
-  return varint.decode(prefixedData)
-}
-
-/**
- * Get the code as varint of a codec name.
- * @param {string} codecName
- * @returns {Buffer}
- */
-exports.getCodeVarint = (codecName) => {
-  const code = codecNameToCodeVarint[codecName]
-  if (code === undefined) {
-    throw new Error('Codec `' + codecName + '` not found')
+  /**
+   * @param {string} string
+   * @returns {Uint8Array}
+   */
+  decode (string) {
+    for (const char of string) {
+      if (this.alphabet && this.alphabet.indexOf(char) < 0) {
+        throw new Error(`invalid character '${char}' in '${string}'`)
+      }
+    }
+    return this.engine.decode(string)
   }
-  return code
+}
+
+module.exports = Base
+
+},{"buffer":3}],30:[function(require,module,exports){
+// @ts-check
+'use strict'
+
+const baseX = require('base-x')
+const Base = require('./base.js')
+const rfc4648 = require('./rfc4648')
+const { decodeText, encodeText } = require('./util')
+
+const identity = () => {
+  return {
+    encode: decodeText,
+    decode: encodeText
+  }
 }
 
 /**
- * Get the varint of a code.
- * @param {Number} code
- * @returns {Array.<number>}
+ * @typedef {import('./base').CodecFactory} CodecFactory
+ *
+ * name, code, implementation, alphabet
+ * @type {Array<[string, string, CodecFactory, string]>}
  */
-exports.getVarint = (code) => {
-  return varint.encode(code)
-}
+const constants = [
+  ['identity', '\x00', identity, ''],
+  ['base2', '0', rfc4648(1), '01'],
+  ['base8', '7', rfc4648(3), '01234567'],
+  ['base10', '9', baseX, '0123456789'],
+  ['base16', 'f', rfc4648(4), '0123456789abcdef'],
+  ['base16upper', 'F', rfc4648(4), '0123456789ABCDEF'],
+  ['base32hex', 'v', rfc4648(5), '0123456789abcdefghijklmnopqrstuv'],
+  ['base32hexupper', 'V', rfc4648(5), '0123456789ABCDEFGHIJKLMNOPQRSTUV'],
+  ['base32hexpad', 't', rfc4648(5), '0123456789abcdefghijklmnopqrstuv='],
+  ['base32hexpadupper', 'T', rfc4648(5), '0123456789ABCDEFGHIJKLMNOPQRSTUV='],
+  ['base32', 'b', rfc4648(5), 'abcdefghijklmnopqrstuvwxyz234567'],
+  ['base32upper', 'B', rfc4648(5), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'],
+  ['base32pad', 'c', rfc4648(5), 'abcdefghijklmnopqrstuvwxyz234567='],
+  ['base32padupper', 'C', rfc4648(5), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567='],
+  ['base32z', 'h', rfc4648(5), 'ybndrfg8ejkmcpqxot1uwisza345h769'],
+  ['base36', 'k', baseX, '0123456789abcdefghijklmnopqrstuvwxyz'],
+  ['base36upper', 'K', baseX, '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'],
+  ['base58btc', 'z', baseX, '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'],
+  ['base58flickr', 'Z', baseX, '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'],
+  ['base64', 'm', rfc4648(6), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'],
+  ['base64pad', 'M', rfc4648(6), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='],
+  ['base64url', 'u', rfc4648(6), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'],
+  ['base64urlpad', 'U', rfc4648(6), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=']
+]
 
-// Make the constants top-level constants
-const constants = require('./constants')
-Object.assign(exports, constants)
+const names = constants.reduce((prev, tupple) => {
+  prev[tupple[0]] = new Base(tupple[0], tupple[1], tupple[2], tupple[3])
+  return prev
+}, {})
 
-// Human friendly names for printing, e.g. in error messages
-exports.print = require('./print')
-
-}).call(this,require("buffer").Buffer)
-},{"./constants":17,"./name-table":19,"./print":20,"./util":21,"./varint-table":22,"buffer":4,"varint":28}],19:[function(require,module,exports){
-'use strict'
-const baseTable = require('./base-table')
-
-// this creates a map for code as hexString -> codecName
-
-const nameTable = {}
-module.exports = nameTable
-
-for (let encodingName in baseTable) {
-  let code = baseTable[encodingName]
-  nameTable[code.toString('hex')] = encodingName
-}
-
-},{"./base-table":16}],20:[function(require,module,exports){
-// THIS FILE IS GENERATED, DO NO EDIT MANUALLY
-// For more information see the README.md
-/* eslint-disable dot-notation */
-'use strict'
-module.exports = Object.freeze({
-
-  // serialization
-  0x50: 'protobuf',
-  0x51: 'cbor',
-  0x60: 'rlp',
-  0x63: 'bencode',
-  0x0200: 'json',
-  0x0201: 'messagepack',
-
-  // multiformat
-  0x30: 'multicodec',
-  0x31: 'multihash',
-  0x32: 'multiaddr',
-  0x33: 'multibase',
-
-  // multihash
-  0x00: 'identity',
-  0x11: 'sha1',
-  0x12: 'sha2-256',
-  0x13: 'sha2-512',
-  0x14: 'sha3-512',
-  0x15: 'sha3-384',
-  0x16: 'sha3-256',
-  0x17: 'sha3-224',
-  0x18: 'shake-128',
-  0x19: 'shake-256',
-  0x1a: 'keccak-224',
-  0x1b: 'keccak-256',
-  0x1c: 'keccak-384',
-  0x1d: 'keccak-512',
-  0x22: 'murmur3-128',
-  0x23: 'murmur3-32',
-  0x56: 'dbl-sha2-256',
-  0xd4: 'md4',
-  0xd5: 'md5',
-  0xd6: 'bmt',
-  0x1100: 'x11',
-  0xb201: 'blake2b-8',
-  0xb202: 'blake2b-16',
-  0xb203: 'blake2b-24',
-  0xb204: 'blake2b-32',
-  0xb205: 'blake2b-40',
-  0xb206: 'blake2b-48',
-  0xb207: 'blake2b-56',
-  0xb208: 'blake2b-64',
-  0xb209: 'blake2b-72',
-  0xb20a: 'blake2b-80',
-  0xb20b: 'blake2b-88',
-  0xb20c: 'blake2b-96',
-  0xb20d: 'blake2b-104',
-  0xb20e: 'blake2b-112',
-  0xb20f: 'blake2b-120',
-  0xb210: 'blake2b-128',
-  0xb211: 'blake2b-136',
-  0xb212: 'blake2b-144',
-  0xb213: 'blake2b-152',
-  0xb214: 'blake2b-160',
-  0xb215: 'blake2b-168',
-  0xb216: 'blake2b-176',
-  0xb217: 'blake2b-184',
-  0xb218: 'blake2b-192',
-  0xb219: 'blake2b-200',
-  0xb21a: 'blake2b-208',
-  0xb21b: 'blake2b-216',
-  0xb21c: 'blake2b-224',
-  0xb21d: 'blake2b-232',
-  0xb21e: 'blake2b-240',
-  0xb21f: 'blake2b-248',
-  0xb220: 'blake2b-256',
-  0xb221: 'blake2b-264',
-  0xb222: 'blake2b-272',
-  0xb223: 'blake2b-280',
-  0xb224: 'blake2b-288',
-  0xb225: 'blake2b-296',
-  0xb226: 'blake2b-304',
-  0xb227: 'blake2b-312',
-  0xb228: 'blake2b-320',
-  0xb229: 'blake2b-328',
-  0xb22a: 'blake2b-336',
-  0xb22b: 'blake2b-344',
-  0xb22c: 'blake2b-352',
-  0xb22d: 'blake2b-360',
-  0xb22e: 'blake2b-368',
-  0xb22f: 'blake2b-376',
-  0xb230: 'blake2b-384',
-  0xb231: 'blake2b-392',
-  0xb232: 'blake2b-400',
-  0xb233: 'blake2b-408',
-  0xb234: 'blake2b-416',
-  0xb235: 'blake2b-424',
-  0xb236: 'blake2b-432',
-  0xb237: 'blake2b-440',
-  0xb238: 'blake2b-448',
-  0xb239: 'blake2b-456',
-  0xb23a: 'blake2b-464',
-  0xb23b: 'blake2b-472',
-  0xb23c: 'blake2b-480',
-  0xb23d: 'blake2b-488',
-  0xb23e: 'blake2b-496',
-  0xb23f: 'blake2b-504',
-  0xb240: 'blake2b-512',
-  0xb241: 'blake2s-8',
-  0xb242: 'blake2s-16',
-  0xb243: 'blake2s-24',
-  0xb244: 'blake2s-32',
-  0xb245: 'blake2s-40',
-  0xb246: 'blake2s-48',
-  0xb247: 'blake2s-56',
-  0xb248: 'blake2s-64',
-  0xb249: 'blake2s-72',
-  0xb24a: 'blake2s-80',
-  0xb24b: 'blake2s-88',
-  0xb24c: 'blake2s-96',
-  0xb24d: 'blake2s-104',
-  0xb24e: 'blake2s-112',
-  0xb24f: 'blake2s-120',
-  0xb250: 'blake2s-128',
-  0xb251: 'blake2s-136',
-  0xb252: 'blake2s-144',
-  0xb253: 'blake2s-152',
-  0xb254: 'blake2s-160',
-  0xb255: 'blake2s-168',
-  0xb256: 'blake2s-176',
-  0xb257: 'blake2s-184',
-  0xb258: 'blake2s-192',
-  0xb259: 'blake2s-200',
-  0xb25a: 'blake2s-208',
-  0xb25b: 'blake2s-216',
-  0xb25c: 'blake2s-224',
-  0xb25d: 'blake2s-232',
-  0xb25e: 'blake2s-240',
-  0xb25f: 'blake2s-248',
-  0xb260: 'blake2s-256',
-  0xb301: 'skein256-8',
-  0xb302: 'skein256-16',
-  0xb303: 'skein256-24',
-  0xb304: 'skein256-32',
-  0xb305: 'skein256-40',
-  0xb306: 'skein256-48',
-  0xb307: 'skein256-56',
-  0xb308: 'skein256-64',
-  0xb309: 'skein256-72',
-  0xb30a: 'skein256-80',
-  0xb30b: 'skein256-88',
-  0xb30c: 'skein256-96',
-  0xb30d: 'skein256-104',
-  0xb30e: 'skein256-112',
-  0xb30f: 'skein256-120',
-  0xb310: 'skein256-128',
-  0xb311: 'skein256-136',
-  0xb312: 'skein256-144',
-  0xb313: 'skein256-152',
-  0xb314: 'skein256-160',
-  0xb315: 'skein256-168',
-  0xb316: 'skein256-176',
-  0xb317: 'skein256-184',
-  0xb318: 'skein256-192',
-  0xb319: 'skein256-200',
-  0xb31a: 'skein256-208',
-  0xb31b: 'skein256-216',
-  0xb31c: 'skein256-224',
-  0xb31d: 'skein256-232',
-  0xb31e: 'skein256-240',
-  0xb31f: 'skein256-248',
-  0xb320: 'skein256-256',
-  0xb321: 'skein512-8',
-  0xb322: 'skein512-16',
-  0xb323: 'skein512-24',
-  0xb324: 'skein512-32',
-  0xb325: 'skein512-40',
-  0xb326: 'skein512-48',
-  0xb327: 'skein512-56',
-  0xb328: 'skein512-64',
-  0xb329: 'skein512-72',
-  0xb32a: 'skein512-80',
-  0xb32b: 'skein512-88',
-  0xb32c: 'skein512-96',
-  0xb32d: 'skein512-104',
-  0xb32e: 'skein512-112',
-  0xb32f: 'skein512-120',
-  0xb330: 'skein512-128',
-  0xb331: 'skein512-136',
-  0xb332: 'skein512-144',
-  0xb333: 'skein512-152',
-  0xb334: 'skein512-160',
-  0xb335: 'skein512-168',
-  0xb336: 'skein512-176',
-  0xb337: 'skein512-184',
-  0xb338: 'skein512-192',
-  0xb339: 'skein512-200',
-  0xb33a: 'skein512-208',
-  0xb33b: 'skein512-216',
-  0xb33c: 'skein512-224',
-  0xb33d: 'skein512-232',
-  0xb33e: 'skein512-240',
-  0xb33f: 'skein512-248',
-  0xb340: 'skein512-256',
-  0xb341: 'skein512-264',
-  0xb342: 'skein512-272',
-  0xb343: 'skein512-280',
-  0xb344: 'skein512-288',
-  0xb345: 'skein512-296',
-  0xb346: 'skein512-304',
-  0xb347: 'skein512-312',
-  0xb348: 'skein512-320',
-  0xb349: 'skein512-328',
-  0xb34a: 'skein512-336',
-  0xb34b: 'skein512-344',
-  0xb34c: 'skein512-352',
-  0xb34d: 'skein512-360',
-  0xb34e: 'skein512-368',
-  0xb34f: 'skein512-376',
-  0xb350: 'skein512-384',
-  0xb351: 'skein512-392',
-  0xb352: 'skein512-400',
-  0xb353: 'skein512-408',
-  0xb354: 'skein512-416',
-  0xb355: 'skein512-424',
-  0xb356: 'skein512-432',
-  0xb357: 'skein512-440',
-  0xb358: 'skein512-448',
-  0xb359: 'skein512-456',
-  0xb35a: 'skein512-464',
-  0xb35b: 'skein512-472',
-  0xb35c: 'skein512-480',
-  0xb35d: 'skein512-488',
-  0xb35e: 'skein512-496',
-  0xb35f: 'skein512-504',
-  0xb360: 'skein512-512',
-  0xb361: 'skein1024-8',
-  0xb362: 'skein1024-16',
-  0xb363: 'skein1024-24',
-  0xb364: 'skein1024-32',
-  0xb365: 'skein1024-40',
-  0xb366: 'skein1024-48',
-  0xb367: 'skein1024-56',
-  0xb368: 'skein1024-64',
-  0xb369: 'skein1024-72',
-  0xb36a: 'skein1024-80',
-  0xb36b: 'skein1024-88',
-  0xb36c: 'skein1024-96',
-  0xb36d: 'skein1024-104',
-  0xb36e: 'skein1024-112',
-  0xb36f: 'skein1024-120',
-  0xb370: 'skein1024-128',
-  0xb371: 'skein1024-136',
-  0xb372: 'skein1024-144',
-  0xb373: 'skein1024-152',
-  0xb374: 'skein1024-160',
-  0xb375: 'skein1024-168',
-  0xb376: 'skein1024-176',
-  0xb377: 'skein1024-184',
-  0xb378: 'skein1024-192',
-  0xb379: 'skein1024-200',
-  0xb37a: 'skein1024-208',
-  0xb37b: 'skein1024-216',
-  0xb37c: 'skein1024-224',
-  0xb37d: 'skein1024-232',
-  0xb37e: 'skein1024-240',
-  0xb37f: 'skein1024-248',
-  0xb380: 'skein1024-256',
-  0xb381: 'skein1024-264',
-  0xb382: 'skein1024-272',
-  0xb383: 'skein1024-280',
-  0xb384: 'skein1024-288',
-  0xb385: 'skein1024-296',
-  0xb386: 'skein1024-304',
-  0xb387: 'skein1024-312',
-  0xb388: 'skein1024-320',
-  0xb389: 'skein1024-328',
-  0xb38a: 'skein1024-336',
-  0xb38b: 'skein1024-344',
-  0xb38c: 'skein1024-352',
-  0xb38d: 'skein1024-360',
-  0xb38e: 'skein1024-368',
-  0xb38f: 'skein1024-376',
-  0xb390: 'skein1024-384',
-  0xb391: 'skein1024-392',
-  0xb392: 'skein1024-400',
-  0xb393: 'skein1024-408',
-  0xb394: 'skein1024-416',
-  0xb395: 'skein1024-424',
-  0xb396: 'skein1024-432',
-  0xb397: 'skein1024-440',
-  0xb398: 'skein1024-448',
-  0xb399: 'skein1024-456',
-  0xb39a: 'skein1024-464',
-  0xb39b: 'skein1024-472',
-  0xb39c: 'skein1024-480',
-  0xb39d: 'skein1024-488',
-  0xb39e: 'skein1024-496',
-  0xb39f: 'skein1024-504',
-  0xb3a0: 'skein1024-512',
-  0xb3a1: 'skein1024-520',
-  0xb3a2: 'skein1024-528',
-  0xb3a3: 'skein1024-536',
-  0xb3a4: 'skein1024-544',
-  0xb3a5: 'skein1024-552',
-  0xb3a6: 'skein1024-560',
-  0xb3a7: 'skein1024-568',
-  0xb3a8: 'skein1024-576',
-  0xb3a9: 'skein1024-584',
-  0xb3aa: 'skein1024-592',
-  0xb3ab: 'skein1024-600',
-  0xb3ac: 'skein1024-608',
-  0xb3ad: 'skein1024-616',
-  0xb3ae: 'skein1024-624',
-  0xb3af: 'skein1024-632',
-  0xb3b0: 'skein1024-640',
-  0xb3b1: 'skein1024-648',
-  0xb3b2: 'skein1024-656',
-  0xb3b3: 'skein1024-664',
-  0xb3b4: 'skein1024-672',
-  0xb3b5: 'skein1024-680',
-  0xb3b6: 'skein1024-688',
-  0xb3b7: 'skein1024-696',
-  0xb3b8: 'skein1024-704',
-  0xb3b9: 'skein1024-712',
-  0xb3ba: 'skein1024-720',
-  0xb3bb: 'skein1024-728',
-  0xb3bc: 'skein1024-736',
-  0xb3bd: 'skein1024-744',
-  0xb3be: 'skein1024-752',
-  0xb3bf: 'skein1024-760',
-  0xb3c0: 'skein1024-768',
-  0xb3c1: 'skein1024-776',
-  0xb3c2: 'skein1024-784',
-  0xb3c3: 'skein1024-792',
-  0xb3c4: 'skein1024-800',
-  0xb3c5: 'skein1024-808',
-  0xb3c6: 'skein1024-816',
-  0xb3c7: 'skein1024-824',
-  0xb3c8: 'skein1024-832',
-  0xb3c9: 'skein1024-840',
-  0xb3ca: 'skein1024-848',
-  0xb3cb: 'skein1024-856',
-  0xb3cc: 'skein1024-864',
-  0xb3cd: 'skein1024-872',
-  0xb3ce: 'skein1024-880',
-  0xb3cf: 'skein1024-888',
-  0xb3d0: 'skein1024-896',
-  0xb3d1: 'skein1024-904',
-  0xb3d2: 'skein1024-912',
-  0xb3d3: 'skein1024-920',
-  0xb3d4: 'skein1024-928',
-  0xb3d5: 'skein1024-936',
-  0xb3d6: 'skein1024-944',
-  0xb3d7: 'skein1024-952',
-  0xb3d8: 'skein1024-960',
-  0xb3d9: 'skein1024-968',
-  0xb3da: 'skein1024-976',
-  0xb3db: 'skein1024-984',
-  0xb3dc: 'skein1024-992',
-  0xb3dd: 'skein1024-1000',
-  0xb3de: 'skein1024-1008',
-  0xb3df: 'skein1024-1016',
-  0xb3e0: 'skein1024-1024',
-
-  // multiaddr
-  0x04: 'ip4',
-  0x06: 'tcp',
-  0x21: 'dccp',
-  0x29: 'ip6',
-  0x2a: 'ip6zone',
-  0x35: 'dns',
-  0x36: 'dns4',
-  0x37: 'dns6',
-  0x38: 'dnsaddr',
-  0x84: 'sctp',
-  0x0111: 'udp',
-  0x0113: 'p2p-webrtc-star',
-  0x0114: 'p2p-webrtc-direct',
-  0x0115: 'p2p-stardust',
-  0x0122: 'p2p-circuit',
-  0x012d: 'udt',
-  0x012e: 'utp',
-  0x0190: 'unix',
-  0x01a5: 'p2p',
-  0x01bb: 'https',
-  0x01bc: 'onion',
-  0x01bd: 'onion3',
-  0x01be: 'garlic64',
-  0x01bf: 'garlic32',
-  0x01cc: 'quic',
-  0x01dd: 'ws',
-  0x01de: 'wss',
-  0x01df: 'p2p-websocket-star',
-  0x01e0: 'http',
-
-  // ipld
-  0x55: 'raw',
-  0x70: 'dag-pb',
-  0x71: 'dag-cbor',
-  0x72: 'libp2p-key',
-  0x78: 'git-raw',
-  0x7b: 'torrent-info',
-  0x7c: 'torrent-file',
-  0x81: 'leofcoin-block',
-  0x82: 'leofcoin-tx',
-  0x83: 'leofcoin-pr',
-  0x90: 'eth-block',
-  0x91: 'eth-block-list',
-  0x92: 'eth-tx-trie',
-  0x93: 'eth-tx',
-  0x94: 'eth-tx-receipt-trie',
-  0x95: 'eth-tx-receipt',
-  0x96: 'eth-state-trie',
-  0x97: 'eth-account-snapshot',
-  0x98: 'eth-storage-trie',
-  0xb0: 'bitcoin-block',
-  0xb1: 'bitcoin-tx',
-  0xc0: 'zcash-block',
-  0xc1: 'zcash-tx',
-  0xd0: 'stellar-block',
-  0xd1: 'stellar-tx',
-  0xe0: 'decred-block',
-  0xe1: 'decred-tx',
-  0xf0: 'dash-block',
-  0xf1: 'dash-tx',
-  0xfa: 'swarm-manifest',
-  0xfb: 'swarm-feed',
-  0x0129: 'dag-json',
-
-  // namespace
-  0x2f: 'path',
-  0xe2: 'ipld-ns',
-  0xe3: 'ipfs-ns',
-  0xe4: 'swarm-ns',
-  0xe5: 'ipns-ns',
-  0xe6: 'zeronet',
-
-  // key
-  0xed: 'ed25519-pub',
-
-  // holochain
-  0x807124: 'holochain-adr-v0',
-  0x817124: 'holochain-adr-v1',
-  0x947124: 'holochain-key-v0',
-  0x957124: 'holochain-key-v1',
-  0xa27124: 'holochain-sig-v0',
-  0xa37124: 'holochain-sig-v1'
-})
-
-},{}],21:[function(require,module,exports){
-(function (Buffer){
-'use strict'
-const varint = require('varint')
+const codes = constants.reduce((prev, tupple) => {
+  prev[tupple[1]] = names[tupple[0]]
+  return prev
+}, {})
 
 module.exports = {
-  numberToBuffer,
-  bufferToNumber,
-  varintBufferEncode,
-  varintBufferDecode
+  names,
+  codes
 }
 
-function bufferToNumber (buf) {
-  return parseInt(buf.toString('hex'), 16)
-}
+},{"./base.js":29,"./rfc4648":32,"./util":33,"base-x":1}],31:[function(require,module,exports){
+// @ts-check
+/**
+ * Implementation of the [multibase](https://github.com/multiformats/multibase) specification.
+ *
+ * @module Multibase
+ */
+'use strict'
 
-function numberToBuffer (num) {
-  let hexString = num.toString(16)
-  if (hexString.length % 2 === 1) {
-    hexString = '0' + hexString
+const { Buffer } = require('buffer')
+const constants = require('./constants')
+const { decodeText, asBuffer } = require('./util')
+
+/** @typedef {import("./base")} Base */
+
+/**
+ * Create a new buffer with the multibase varint+code.
+ *
+ * @param {string|number} nameOrCode - The multibase name or code number.
+ * @param {Uint8Array} buf - The data to be prefixed with multibase.
+ * @returns {Buffer}
+ * @throws {Error} Will throw if the encoding is not supported
+ */
+function multibase (nameOrCode, buf) {
+  if (!buf) {
+    throw new Error('requires an encoded buffer')
   }
-  return Buffer.from(hexString, 'hex')
+  const { name, codeBuf } = encoding(nameOrCode)
+  validEncode(name, buf)
+
+  const buffer = Buffer.alloc(codeBuf.length + buf.length)
+  buffer.set(codeBuf, 0)
+  buffer.set(buf, codeBuf.length)
+
+  return buffer
 }
 
-function varintBufferEncode (input) {
-  return Buffer.from(varint.encode(bufferToNumber(input)))
+/**
+ * Encode data with the specified base and add the multibase prefix.
+ *
+ * @param {string|number} nameOrCode - The multibase name or code number.
+ * @param {Uint8Array} buf - The data to be encoded.
+ * @returns {Buffer}
+ * @throws {Error} Will throw if the encoding is not supported
+ *
+ */
+function encode (nameOrCode, buf) {
+  const enc = encoding(nameOrCode)
+
+  return Buffer.concat([enc.codeBuf, Buffer.from(enc.encode(buf))])
 }
 
-function varintBufferDecode (input) {
-  return numberToBuffer(varint.decode(input))
+/**
+ * Takes a Uint8Array or string encoded with multibase header, decodes it and
+ * returns the decoded buffer
+ *
+ * @param {Uint8Array|string} data
+ * @returns {Buffer}
+ * @throws {Error} Will throw if the encoding is not supported
+ *
+ */
+function decode (data) {
+  if (ArrayBuffer.isView(data)) {
+    data = decodeText(data)
+  }
+  const prefix = data[0]
+
+  // Make all encodings case-insensitive except the ones that include upper and lower chars in the alphabet
+  if (['f', 'F', 'v', 'V', 't', 'T', 'b', 'B', 'c', 'C', 'h', 'k', 'K'].includes(prefix)) {
+    data = data.toLowerCase()
+  }
+  const enc = encoding(data[0])
+  return asBuffer(enc.decode(data.substring(1)))
 }
 
-}).call(this,require("buffer").Buffer)
-},{"buffer":4,"varint":28}],22:[function(require,module,exports){
+/**
+ * Is the given data multibase encoded?
+ *
+ * @param {Uint8Array|string} data
+ * @returns {false|string}
+ */
+function isEncoded (data) {
+  if (data instanceof Uint8Array) {
+    data = decodeText(data)
+  }
+
+  // Ensure bufOrString is a string
+  if (Object.prototype.toString.call(data) !== '[object String]') {
+    return false
+  }
+
+  try {
+    const enc = encoding(data[0])
+    return enc.name
+  } catch (err) {
+    return false
+  }
+}
+
+/**
+ * Validate encoded data
+ *
+ * @param {string} name
+ * @param {Uint8Array} buf
+ * @returns {void}
+ * @throws {Error} Will throw if the encoding is not supported
+ */
+function validEncode (name, buf) {
+  const enc = encoding(name)
+  enc.decode(decodeText(buf))
+}
+
+/**
+ * Get the encoding by name or code
+ *
+ * @param {string|number} nameOrCode
+ * @returns {Base}
+ * @throws {Error} Will throw if the encoding is not supported
+ */
+function encoding (nameOrCode) {
+  if (constants.names[nameOrCode]) {
+    return constants.names[nameOrCode]
+  } else if (constants.codes[nameOrCode]) {
+    return constants.codes[nameOrCode]
+  } else {
+    throw new Error(`Unsupported encoding: ${nameOrCode}`)
+  }
+}
+
+/**
+ * Get encoding from data
+ *
+ * @param {string|Uint8Array} data
+ * @returns {Base}
+ * @throws {Error} Will throw if the encoding is not supported
+ */
+function encodingFromData (data) {
+  if (data instanceof Uint8Array) {
+    data = decodeText(data)
+  }
+
+  return encoding(data[0])
+}
+
+exports = module.exports = multibase
+exports.encode = encode
+exports.decode = decode
+exports.isEncoded = isEncoded
+exports.encoding = encoding
+exports.encodingFromData = encodingFromData
+exports.names = Object.freeze(constants.names)
+exports.codes = Object.freeze(constants.codes)
+
+},{"./constants":30,"./util":33,"buffer":3}],32:[function(require,module,exports){
+// @ts-check
 'use strict'
-const baseTable = require('./base-table')
-const varintBufferEncode = require('./util').varintBufferEncode
 
-// this creates a map for codecName -> codeVarintBuffer
+/** @typedef {import('./base').CodecFactory} CodecFactory */
 
-const varintTable = {}
-module.exports = varintTable
+/**
+ * @param {string} string
+ * @param {string} alphabet
+ * @param {number} bitsPerChar
+ * @returns {Uint8Array}
+ */
+const decode = (string, alphabet, bitsPerChar) => {
+  // Build the character lookup table:
+  const codes = {}
+  for (let i = 0; i < alphabet.length; ++i) {
+    codes[alphabet[i]] = i
+  }
 
-for (let encodingName in baseTable) {
-  let code = baseTable[encodingName]
-  varintTable[encodingName] = varintBufferEncode(code)
+  // Count the padding bytes:
+  let end = string.length
+  while (string[end - 1] === '=') {
+    --end
+  }
+
+  // Allocate the output:
+  const out = new Uint8Array((end * bitsPerChar / 8) | 0)
+
+  // Parse the data:
+  let bits = 0 // Number of bits currently in the buffer
+  let buffer = 0 // Bits waiting to be written out, MSB first
+  let written = 0 // Next byte to write
+  for (let i = 0; i < end; ++i) {
+    // Read one character from the string:
+    const value = codes[string[i]]
+    if (value === undefined) {
+      throw new SyntaxError('Invalid character ' + string[i])
+    }
+
+    // Append the bits to the buffer:
+    buffer = (buffer << bitsPerChar) | value
+    bits += bitsPerChar
+
+    // Write out some bits if the buffer has a byte's worth:
+    if (bits >= 8) {
+      bits -= 8
+      out[written++] = 0xff & (buffer >> bits)
+    }
+  }
+
+  // Verify that we have received just enough bits:
+  if (bits >= bitsPerChar || 0xff & (buffer << (8 - bits))) {
+    throw new SyntaxError('Unexpected end of data')
+  }
+
+  return out
 }
 
-},{"./base-table":16,"./util":21}],23:[function(require,module,exports){
-/* eslint quote-props: off */
-/* eslint key-spacing: off */
+/**
+ * @param {Uint8Array} data
+ * @param {string} alphabet
+ * @param {number} bitsPerChar
+ * @returns {string}
+ */
+const encode = (data, alphabet, bitsPerChar) => {
+  const pad = alphabet[alphabet.length - 1] === '='
+  const mask = (1 << bitsPerChar) - 1
+  let out = ''
+
+  let bits = 0 // Number of bits currently in the buffer
+  let buffer = 0 // Bits waiting to be written out, MSB first
+  for (let i = 0; i < data.length; ++i) {
+    // Slurp data into the buffer:
+    buffer = (buffer << 8) | data[i]
+    bits += 8
+
+    // Write out as much as we can:
+    while (bits > bitsPerChar) {
+      bits -= bitsPerChar
+      out += alphabet[mask & (buffer >> bits)]
+    }
+  }
+
+  // Partial character:
+  if (bits) {
+    out += alphabet[mask & (buffer << (bitsPerChar - bits))]
+  }
+
+  // Add padding characters until we hit a byte boundary:
+  if (pad) {
+    while ((out.length * bitsPerChar) & 7) {
+      out += '='
+    }
+  }
+
+  return out
+}
+
+/**
+ * @param {number} bitsPerChar
+ * @returns {CodecFactory}
+ */
+module.exports = (bitsPerChar) => (alphabet) => {
+  return {
+    /**
+     * @param {Uint8Array} input
+     * @returns {string}
+     */
+    encode (input) {
+      return encode(input, alphabet, bitsPerChar)
+    },
+    /**
+     * @param {string} input
+     * @returns {Uint8Array}
+     */
+    decode (input) {
+      return decode(input, alphabet, bitsPerChar)
+    }
+  }
+}
+
+},{}],33:[function(require,module,exports){
+// @ts-check
 'use strict'
 
-exports.names = Object.freeze({
-  'identity':   0x0,
-  'sha1':       0x11,
-  'sha2-256':   0x12,
-  'sha2-512':   0x13,
-  'dbl-sha2-256': 0x56,
-  'sha3-224':   0x17,
-  'sha3-256':   0x16,
-  'sha3-384':   0x15,
-  'sha3-512':   0x14,
-  'shake-128':  0x18,
-  'shake-256':  0x19,
-  'keccak-224': 0x1A,
-  'keccak-256': 0x1B,
-  'keccak-384': 0x1C,
-  'keccak-512': 0x1D,
-  'murmur3-128': 0x22,
-  'murmur3-32':  0x23,
-  'blake2b-8':   0xb201,
-  'blake2b-16':  0xb202,
-  'blake2b-24':  0xb203,
-  'blake2b-32':  0xb204,
-  'blake2b-40':  0xb205,
-  'blake2b-48':  0xb206,
-  'blake2b-56':  0xb207,
-  'blake2b-64':  0xb208,
-  'blake2b-72':  0xb209,
-  'blake2b-80':  0xb20a,
-  'blake2b-88':  0xb20b,
-  'blake2b-96':  0xb20c,
-  'blake2b-104': 0xb20d,
-  'blake2b-112': 0xb20e,
-  'blake2b-120': 0xb20f,
-  'blake2b-128': 0xb210,
-  'blake2b-136': 0xb211,
-  'blake2b-144': 0xb212,
-  'blake2b-152': 0xb213,
-  'blake2b-160': 0xb214,
-  'blake2b-168': 0xb215,
-  'blake2b-176': 0xb216,
-  'blake2b-184': 0xb217,
-  'blake2b-192': 0xb218,
-  'blake2b-200': 0xb219,
-  'blake2b-208': 0xb21a,
-  'blake2b-216': 0xb21b,
-  'blake2b-224': 0xb21c,
-  'blake2b-232': 0xb21d,
-  'blake2b-240': 0xb21e,
-  'blake2b-248': 0xb21f,
-  'blake2b-256': 0xb220,
-  'blake2b-264': 0xb221,
-  'blake2b-272': 0xb222,
-  'blake2b-280': 0xb223,
-  'blake2b-288': 0xb224,
-  'blake2b-296': 0xb225,
-  'blake2b-304': 0xb226,
-  'blake2b-312': 0xb227,
-  'blake2b-320': 0xb228,
-  'blake2b-328': 0xb229,
-  'blake2b-336': 0xb22a,
-  'blake2b-344': 0xb22b,
-  'blake2b-352': 0xb22c,
-  'blake2b-360': 0xb22d,
-  'blake2b-368': 0xb22e,
-  'blake2b-376': 0xb22f,
-  'blake2b-384': 0xb230,
-  'blake2b-392': 0xb231,
-  'blake2b-400': 0xb232,
-  'blake2b-408': 0xb233,
-  'blake2b-416': 0xb234,
-  'blake2b-424': 0xb235,
-  'blake2b-432': 0xb236,
-  'blake2b-440': 0xb237,
-  'blake2b-448': 0xb238,
-  'blake2b-456': 0xb239,
-  'blake2b-464': 0xb23a,
-  'blake2b-472': 0xb23b,
-  'blake2b-480': 0xb23c,
-  'blake2b-488': 0xb23d,
-  'blake2b-496': 0xb23e,
-  'blake2b-504': 0xb23f,
-  'blake2b-512': 0xb240,
-  'blake2s-8':   0xb241,
-  'blake2s-16':  0xb242,
-  'blake2s-24':  0xb243,
-  'blake2s-32':  0xb244,
-  'blake2s-40':  0xb245,
-  'blake2s-48':  0xb246,
-  'blake2s-56':  0xb247,
-  'blake2s-64':  0xb248,
-  'blake2s-72':  0xb249,
-  'blake2s-80':  0xb24a,
-  'blake2s-88':  0xb24b,
-  'blake2s-96':  0xb24c,
-  'blake2s-104': 0xb24d,
-  'blake2s-112': 0xb24e,
-  'blake2s-120': 0xb24f,
-  'blake2s-128': 0xb250,
-  'blake2s-136': 0xb251,
-  'blake2s-144': 0xb252,
-  'blake2s-152': 0xb253,
-  'blake2s-160': 0xb254,
-  'blake2s-168': 0xb255,
-  'blake2s-176': 0xb256,
-  'blake2s-184': 0xb257,
-  'blake2s-192': 0xb258,
-  'blake2s-200': 0xb259,
-  'blake2s-208': 0xb25a,
-  'blake2s-216': 0xb25b,
-  'blake2s-224': 0xb25c,
-  'blake2s-232': 0xb25d,
-  'blake2s-240': 0xb25e,
-  'blake2s-248': 0xb25f,
-  'blake2s-256': 0xb260,
-  'Skein256-8': 0xb301,
-  'Skein256-16': 0xb302,
-  'Skein256-24': 0xb303,
-  'Skein256-32': 0xb304,
-  'Skein256-40': 0xb305,
-  'Skein256-48': 0xb306,
-  'Skein256-56': 0xb307,
-  'Skein256-64': 0xb308,
-  'Skein256-72': 0xb309,
-  'Skein256-80': 0xb30a,
-  'Skein256-88': 0xb30b,
-  'Skein256-96': 0xb30c,
-  'Skein256-104': 0xb30d,
-  'Skein256-112': 0xb30e,
-  'Skein256-120': 0xb30f,
-  'Skein256-128': 0xb310,
-  'Skein256-136': 0xb311,
-  'Skein256-144': 0xb312,
-  'Skein256-152': 0xb313,
-  'Skein256-160': 0xb314,
-  'Skein256-168': 0xb315,
-  'Skein256-176': 0xb316,
-  'Skein256-184': 0xb317,
-  'Skein256-192': 0xb318,
-  'Skein256-200': 0xb319,
-  'Skein256-208': 0xb31a,
-  'Skein256-216': 0xb31b,
-  'Skein256-224': 0xb31c,
-  'Skein256-232': 0xb31d,
-  'Skein256-240': 0xb31e,
-  'Skein256-248': 0xb31f,
-  'Skein256-256': 0xb320,
-  'Skein512-8': 0xb321,
-  'Skein512-16': 0xb322,
-  'Skein512-24': 0xb323,
-  'Skein512-32': 0xb324,
-  'Skein512-40': 0xb325,
-  'Skein512-48': 0xb326,
-  'Skein512-56': 0xb327,
-  'Skein512-64': 0xb328,
-  'Skein512-72': 0xb329,
-  'Skein512-80': 0xb32a,
-  'Skein512-88': 0xb32b,
-  'Skein512-96': 0xb32c,
-  'Skein512-104': 0xb32d,
-  'Skein512-112': 0xb32e,
-  'Skein512-120': 0xb32f,
-  'Skein512-128': 0xb330,
-  'Skein512-136': 0xb331,
-  'Skein512-144': 0xb332,
-  'Skein512-152': 0xb333,
-  'Skein512-160': 0xb334,
-  'Skein512-168': 0xb335,
-  'Skein512-176': 0xb336,
-  'Skein512-184': 0xb337,
-  'Skein512-192': 0xb338,
-  'Skein512-200': 0xb339,
-  'Skein512-208': 0xb33a,
-  'Skein512-216': 0xb33b,
-  'Skein512-224': 0xb33c,
-  'Skein512-232': 0xb33d,
-  'Skein512-240': 0xb33e,
-  'Skein512-248': 0xb33f,
-  'Skein512-256': 0xb340,
-  'Skein512-264': 0xb341,
-  'Skein512-272': 0xb342,
-  'Skein512-280': 0xb343,
-  'Skein512-288': 0xb344,
-  'Skein512-296': 0xb345,
-  'Skein512-304': 0xb346,
-  'Skein512-312': 0xb347,
-  'Skein512-320': 0xb348,
-  'Skein512-328': 0xb349,
-  'Skein512-336': 0xb34a,
-  'Skein512-344': 0xb34b,
-  'Skein512-352': 0xb34c,
-  'Skein512-360': 0xb34d,
-  'Skein512-368': 0xb34e,
-  'Skein512-376': 0xb34f,
-  'Skein512-384': 0xb350,
-  'Skein512-392': 0xb351,
-  'Skein512-400': 0xb352,
-  'Skein512-408': 0xb353,
-  'Skein512-416': 0xb354,
-  'Skein512-424': 0xb355,
-  'Skein512-432': 0xb356,
-  'Skein512-440': 0xb357,
-  'Skein512-448': 0xb358,
-  'Skein512-456': 0xb359,
-  'Skein512-464': 0xb35a,
-  'Skein512-472': 0xb35b,
-  'Skein512-480': 0xb35c,
-  'Skein512-488': 0xb35d,
-  'Skein512-496': 0xb35e,
-  'Skein512-504': 0xb35f,
-  'Skein512-512': 0xb360,
-  'Skein1024-8': 0xb361,
-  'Skein1024-16': 0xb362,
-  'Skein1024-24': 0xb363,
-  'Skein1024-32': 0xb364,
-  'Skein1024-40': 0xb365,
-  'Skein1024-48': 0xb366,
-  'Skein1024-56': 0xb367,
-  'Skein1024-64': 0xb368,
-  'Skein1024-72': 0xb369,
-  'Skein1024-80': 0xb36a,
-  'Skein1024-88': 0xb36b,
-  'Skein1024-96': 0xb36c,
-  'Skein1024-104': 0xb36d,
-  'Skein1024-112': 0xb36e,
-  'Skein1024-120': 0xb36f,
-  'Skein1024-128': 0xb370,
-  'Skein1024-136': 0xb371,
-  'Skein1024-144': 0xb372,
-  'Skein1024-152': 0xb373,
-  'Skein1024-160': 0xb374,
-  'Skein1024-168': 0xb375,
-  'Skein1024-176': 0xb376,
-  'Skein1024-184': 0xb377,
-  'Skein1024-192': 0xb378,
-  'Skein1024-200': 0xb379,
-  'Skein1024-208': 0xb37a,
-  'Skein1024-216': 0xb37b,
-  'Skein1024-224': 0xb37c,
-  'Skein1024-232': 0xb37d,
-  'Skein1024-240': 0xb37e,
-  'Skein1024-248': 0xb37f,
-  'Skein1024-256': 0xb380,
-  'Skein1024-264': 0xb381,
-  'Skein1024-272': 0xb382,
-  'Skein1024-280': 0xb383,
-  'Skein1024-288': 0xb384,
-  'Skein1024-296': 0xb385,
-  'Skein1024-304': 0xb386,
-  'Skein1024-312': 0xb387,
-  'Skein1024-320': 0xb388,
-  'Skein1024-328': 0xb389,
-  'Skein1024-336': 0xb38a,
-  'Skein1024-344': 0xb38b,
-  'Skein1024-352': 0xb38c,
-  'Skein1024-360': 0xb38d,
-  'Skein1024-368': 0xb38e,
-  'Skein1024-376': 0xb38f,
-  'Skein1024-384': 0xb390,
-  'Skein1024-392': 0xb391,
-  'Skein1024-400': 0xb392,
-  'Skein1024-408': 0xb393,
-  'Skein1024-416': 0xb394,
-  'Skein1024-424': 0xb395,
-  'Skein1024-432': 0xb396,
-  'Skein1024-440': 0xb397,
-  'Skein1024-448': 0xb398,
-  'Skein1024-456': 0xb399,
-  'Skein1024-464': 0xb39a,
-  'Skein1024-472': 0xb39b,
-  'Skein1024-480': 0xb39c,
-  'Skein1024-488': 0xb39d,
-  'Skein1024-496': 0xb39e,
-  'Skein1024-504': 0xb39f,
-  'Skein1024-512': 0xb3a0,
-  'Skein1024-520': 0xb3a1,
-  'Skein1024-528': 0xb3a2,
-  'Skein1024-536': 0xb3a3,
-  'Skein1024-544': 0xb3a4,
-  'Skein1024-552': 0xb3a5,
-  'Skein1024-560': 0xb3a6,
-  'Skein1024-568': 0xb3a7,
-  'Skein1024-576': 0xb3a8,
-  'Skein1024-584': 0xb3a9,
-  'Skein1024-592': 0xb3aa,
-  'Skein1024-600': 0xb3ab,
-  'Skein1024-608': 0xb3ac,
-  'Skein1024-616': 0xb3ad,
-  'Skein1024-624': 0xb3ae,
-  'Skein1024-632': 0xb3af,
-  'Skein1024-640': 0xb3b0,
-  'Skein1024-648': 0xb3b1,
-  'Skein1024-656': 0xb3b2,
-  'Skein1024-664': 0xb3b3,
-  'Skein1024-672': 0xb3b4,
-  'Skein1024-680': 0xb3b5,
-  'Skein1024-688': 0xb3b6,
-  'Skein1024-696': 0xb3b7,
-  'Skein1024-704': 0xb3b8,
-  'Skein1024-712': 0xb3b9,
-  'Skein1024-720': 0xb3ba,
-  'Skein1024-728': 0xb3bb,
-  'Skein1024-736': 0xb3bc,
-  'Skein1024-744': 0xb3bd,
-  'Skein1024-752': 0xb3be,
-  'Skein1024-760': 0xb3bf,
-  'Skein1024-768': 0xb3c0,
-  'Skein1024-776': 0xb3c1,
-  'Skein1024-784': 0xb3c2,
-  'Skein1024-792': 0xb3c3,
-  'Skein1024-800': 0xb3c4,
-  'Skein1024-808': 0xb3c5,
-  'Skein1024-816': 0xb3c6,
-  'Skein1024-824': 0xb3c7,
-  'Skein1024-832': 0xb3c8,
-  'Skein1024-840': 0xb3c9,
-  'Skein1024-848': 0xb3ca,
-  'Skein1024-856': 0xb3cb,
-  'Skein1024-864': 0xb3cc,
-  'Skein1024-872': 0xb3cd,
-  'Skein1024-880': 0xb3ce,
-  'Skein1024-888': 0xb3cf,
-  'Skein1024-896': 0xb3d0,
-  'Skein1024-904': 0xb3d1,
-  'Skein1024-912': 0xb3d2,
-  'Skein1024-920': 0xb3d3,
-  'Skein1024-928': 0xb3d4,
-  'Skein1024-936': 0xb3d5,
-  'Skein1024-944': 0xb3d6,
-  'Skein1024-952': 0xb3d7,
-  'Skein1024-960': 0xb3d8,
-  'Skein1024-968': 0xb3d9,
-  'Skein1024-976': 0xb3da,
-  'Skein1024-984': 0xb3db,
-  'Skein1024-992': 0xb3dc,
-  'Skein1024-1000': 0xb3dd,
-  'Skein1024-1008': 0xb3de,
-  'Skein1024-1016': 0xb3df,
-  'Skein1024-1024': 0xb3e0
-})
+const { Buffer } = require('buffer')
+const { TextEncoder, TextDecoder } = require('web-encoding')
 
-exports.codes = Object.freeze({
-  0x0: 'identity',
+const textDecoder = new TextDecoder()
+/**
+ * @param {ArrayBufferView|ArrayBuffer} bytes
+ * @returns {string}
+ */
+const decodeText = (bytes) => textDecoder.decode(bytes)
 
-  // sha family
-  0x11: 'sha1',
-  0x12: 'sha2-256',
-  0x13: 'sha2-512',
-  0x56: 'dbl-sha2-256',
-  0x17: 'sha3-224',
-  0x16: 'sha3-256',
-  0x15: 'sha3-384',
-  0x14: 'sha3-512',
-  0x18: 'shake-128',
-  0x19: 'shake-256',
-  0x1A: 'keccak-224',
-  0x1B: 'keccak-256',
-  0x1C: 'keccak-384',
-  0x1D: 'keccak-512',
+const textEncoder = new TextEncoder()
+/**
+ * @param {string} text
+ * @returns {Uint8Array}
+ */
+const encodeText = (text) => textEncoder.encode(text)
 
-  0x22: 'murmur3-128',
-  0x23: 'murmur3-32',
+/**
+ * @param {ArrayBufferView} bytes
+ * @returns {Buffer}
+ */
+const asBuffer = ({ buffer, byteLength, byteOffset }) =>
+  Buffer.from(buffer, byteOffset, byteLength)
 
-  // blake2
-  0xb201: 'blake2b-8',
-  0xb202: 'blake2b-16',
-  0xb203: 'blake2b-24',
-  0xb204: 'blake2b-32',
-  0xb205: 'blake2b-40',
-  0xb206: 'blake2b-48',
-  0xb207: 'blake2b-56',
-  0xb208: 'blake2b-64',
-  0xb209: 'blake2b-72',
-  0xb20a: 'blake2b-80',
-  0xb20b: 'blake2b-88',
-  0xb20c: 'blake2b-96',
-  0xb20d: 'blake2b-104',
-  0xb20e: 'blake2b-112',
-  0xb20f: 'blake2b-120',
-  0xb210: 'blake2b-128',
-  0xb211: 'blake2b-136',
-  0xb212: 'blake2b-144',
-  0xb213: 'blake2b-152',
-  0xb214: 'blake2b-160',
-  0xb215: 'blake2b-168',
-  0xb216: 'blake2b-176',
-  0xb217: 'blake2b-184',
-  0xb218: 'blake2b-192',
-  0xb219: 'blake2b-200',
-  0xb21a: 'blake2b-208',
-  0xb21b: 'blake2b-216',
-  0xb21c: 'blake2b-224',
-  0xb21d: 'blake2b-232',
-  0xb21e: 'blake2b-240',
-  0xb21f: 'blake2b-248',
-  0xb220: 'blake2b-256',
-  0xb221: 'blake2b-264',
-  0xb222: 'blake2b-272',
-  0xb223: 'blake2b-280',
-  0xb224: 'blake2b-288',
-  0xb225: 'blake2b-296',
-  0xb226: 'blake2b-304',
-  0xb227: 'blake2b-312',
-  0xb228: 'blake2b-320',
-  0xb229: 'blake2b-328',
-  0xb22a: 'blake2b-336',
-  0xb22b: 'blake2b-344',
-  0xb22c: 'blake2b-352',
-  0xb22d: 'blake2b-360',
-  0xb22e: 'blake2b-368',
-  0xb22f: 'blake2b-376',
-  0xb230: 'blake2b-384',
-  0xb231: 'blake2b-392',
-  0xb232: 'blake2b-400',
-  0xb233: 'blake2b-408',
-  0xb234: 'blake2b-416',
-  0xb235: 'blake2b-424',
-  0xb236: 'blake2b-432',
-  0xb237: 'blake2b-440',
-  0xb238: 'blake2b-448',
-  0xb239: 'blake2b-456',
-  0xb23a: 'blake2b-464',
-  0xb23b: 'blake2b-472',
-  0xb23c: 'blake2b-480',
-  0xb23d: 'blake2b-488',
-  0xb23e: 'blake2b-496',
-  0xb23f: 'blake2b-504',
-  0xb240: 'blake2b-512',
-  0xb241: 'blake2s-8',
-  0xb242: 'blake2s-16',
-  0xb243: 'blake2s-24',
-  0xb244: 'blake2s-32',
-  0xb245: 'blake2s-40',
-  0xb246: 'blake2s-48',
-  0xb247: 'blake2s-56',
-  0xb248: 'blake2s-64',
-  0xb249: 'blake2s-72',
-  0xb24a: 'blake2s-80',
-  0xb24b: 'blake2s-88',
-  0xb24c: 'blake2s-96',
-  0xb24d: 'blake2s-104',
-  0xb24e: 'blake2s-112',
-  0xb24f: 'blake2s-120',
-  0xb250: 'blake2s-128',
-  0xb251: 'blake2s-136',
-  0xb252: 'blake2s-144',
-  0xb253: 'blake2s-152',
-  0xb254: 'blake2s-160',
-  0xb255: 'blake2s-168',
-  0xb256: 'blake2s-176',
-  0xb257: 'blake2s-184',
-  0xb258: 'blake2s-192',
-  0xb259: 'blake2s-200',
-  0xb25a: 'blake2s-208',
-  0xb25b: 'blake2s-216',
-  0xb25c: 'blake2s-224',
-  0xb25d: 'blake2s-232',
-  0xb25e: 'blake2s-240',
-  0xb25f: 'blake2s-248',
-  0xb260: 'blake2s-256',
+module.exports = { decodeText, encodeText, asBuffer }
 
-  // skein
-  0xb301: 'Skein256-8',
-  0xb302: 'Skein256-16',
-  0xb303: 'Skein256-24',
-  0xb304: 'Skein256-32',
-  0xb305: 'Skein256-40',
-  0xb306: 'Skein256-48',
-  0xb307: 'Skein256-56',
-  0xb308: 'Skein256-64',
-  0xb309: 'Skein256-72',
-  0xb30a: 'Skein256-80',
-  0xb30b: 'Skein256-88',
-  0xb30c: 'Skein256-96',
-  0xb30d: 'Skein256-104',
-  0xb30e: 'Skein256-112',
-  0xb30f: 'Skein256-120',
-  0xb310: 'Skein256-128',
-  0xb311: 'Skein256-136',
-  0xb312: 'Skein256-144',
-  0xb313: 'Skein256-152',
-  0xb314: 'Skein256-160',
-  0xb315: 'Skein256-168',
-  0xb316: 'Skein256-176',
-  0xb317: 'Skein256-184',
-  0xb318: 'Skein256-192',
-  0xb319: 'Skein256-200',
-  0xb31a: 'Skein256-208',
-  0xb31b: 'Skein256-216',
-  0xb31c: 'Skein256-224',
-  0xb31d: 'Skein256-232',
-  0xb31e: 'Skein256-240',
-  0xb31f: 'Skein256-248',
-  0xb320: 'Skein256-256',
-  0xb321: 'Skein512-8',
-  0xb322: 'Skein512-16',
-  0xb323: 'Skein512-24',
-  0xb324: 'Skein512-32',
-  0xb325: 'Skein512-40',
-  0xb326: 'Skein512-48',
-  0xb327: 'Skein512-56',
-  0xb328: 'Skein512-64',
-  0xb329: 'Skein512-72',
-  0xb32a: 'Skein512-80',
-  0xb32b: 'Skein512-88',
-  0xb32c: 'Skein512-96',
-  0xb32d: 'Skein512-104',
-  0xb32e: 'Skein512-112',
-  0xb32f: 'Skein512-120',
-  0xb330: 'Skein512-128',
-  0xb331: 'Skein512-136',
-  0xb332: 'Skein512-144',
-  0xb333: 'Skein512-152',
-  0xb334: 'Skein512-160',
-  0xb335: 'Skein512-168',
-  0xb336: 'Skein512-176',
-  0xb337: 'Skein512-184',
-  0xb338: 'Skein512-192',
-  0xb339: 'Skein512-200',
-  0xb33a: 'Skein512-208',
-  0xb33b: 'Skein512-216',
-  0xb33c: 'Skein512-224',
-  0xb33d: 'Skein512-232',
-  0xb33e: 'Skein512-240',
-  0xb33f: 'Skein512-248',
-  0xb340: 'Skein512-256',
-  0xb341: 'Skein512-264',
-  0xb342: 'Skein512-272',
-  0xb343: 'Skein512-280',
-  0xb344: 'Skein512-288',
-  0xb345: 'Skein512-296',
-  0xb346: 'Skein512-304',
-  0xb347: 'Skein512-312',
-  0xb348: 'Skein512-320',
-  0xb349: 'Skein512-328',
-  0xb34a: 'Skein512-336',
-  0xb34b: 'Skein512-344',
-  0xb34c: 'Skein512-352',
-  0xb34d: 'Skein512-360',
-  0xb34e: 'Skein512-368',
-  0xb34f: 'Skein512-376',
-  0xb350: 'Skein512-384',
-  0xb351: 'Skein512-392',
-  0xb352: 'Skein512-400',
-  0xb353: 'Skein512-408',
-  0xb354: 'Skein512-416',
-  0xb355: 'Skein512-424',
-  0xb356: 'Skein512-432',
-  0xb357: 'Skein512-440',
-  0xb358: 'Skein512-448',
-  0xb359: 'Skein512-456',
-  0xb35a: 'Skein512-464',
-  0xb35b: 'Skein512-472',
-  0xb35c: 'Skein512-480',
-  0xb35d: 'Skein512-488',
-  0xb35e: 'Skein512-496',
-  0xb35f: 'Skein512-504',
-  0xb360: 'Skein512-512',
-  0xb361: 'Skein1024-8',
-  0xb362: 'Skein1024-16',
-  0xb363: 'Skein1024-24',
-  0xb364: 'Skein1024-32',
-  0xb365: 'Skein1024-40',
-  0xb366: 'Skein1024-48',
-  0xb367: 'Skein1024-56',
-  0xb368: 'Skein1024-64',
-  0xb369: 'Skein1024-72',
-  0xb36a: 'Skein1024-80',
-  0xb36b: 'Skein1024-88',
-  0xb36c: 'Skein1024-96',
-  0xb36d: 'Skein1024-104',
-  0xb36e: 'Skein1024-112',
-  0xb36f: 'Skein1024-120',
-  0xb370: 'Skein1024-128',
-  0xb371: 'Skein1024-136',
-  0xb372: 'Skein1024-144',
-  0xb373: 'Skein1024-152',
-  0xb374: 'Skein1024-160',
-  0xb375: 'Skein1024-168',
-  0xb376: 'Skein1024-176',
-  0xb377: 'Skein1024-184',
-  0xb378: 'Skein1024-192',
-  0xb379: 'Skein1024-200',
-  0xb37a: 'Skein1024-208',
-  0xb37b: 'Skein1024-216',
-  0xb37c: 'Skein1024-224',
-  0xb37d: 'Skein1024-232',
-  0xb37e: 'Skein1024-240',
-  0xb37f: 'Skein1024-248',
-  0xb380: 'Skein1024-256',
-  0xb381: 'Skein1024-264',
-  0xb382: 'Skein1024-272',
-  0xb383: 'Skein1024-280',
-  0xb384: 'Skein1024-288',
-  0xb385: 'Skein1024-296',
-  0xb386: 'Skein1024-304',
-  0xb387: 'Skein1024-312',
-  0xb388: 'Skein1024-320',
-  0xb389: 'Skein1024-328',
-  0xb38a: 'Skein1024-336',
-  0xb38b: 'Skein1024-344',
-  0xb38c: 'Skein1024-352',
-  0xb38d: 'Skein1024-360',
-  0xb38e: 'Skein1024-368',
-  0xb38f: 'Skein1024-376',
-  0xb390: 'Skein1024-384',
-  0xb391: 'Skein1024-392',
-  0xb392: 'Skein1024-400',
-  0xb393: 'Skein1024-408',
-  0xb394: 'Skein1024-416',
-  0xb395: 'Skein1024-424',
-  0xb396: 'Skein1024-432',
-  0xb397: 'Skein1024-440',
-  0xb398: 'Skein1024-448',
-  0xb399: 'Skein1024-456',
-  0xb39a: 'Skein1024-464',
-  0xb39b: 'Skein1024-472',
-  0xb39c: 'Skein1024-480',
-  0xb39d: 'Skein1024-488',
-  0xb39e: 'Skein1024-496',
-  0xb39f: 'Skein1024-504',
-  0xb3a0: 'Skein1024-512',
-  0xb3a1: 'Skein1024-520',
-  0xb3a2: 'Skein1024-528',
-  0xb3a3: 'Skein1024-536',
-  0xb3a4: 'Skein1024-544',
-  0xb3a5: 'Skein1024-552',
-  0xb3a6: 'Skein1024-560',
-  0xb3a7: 'Skein1024-568',
-  0xb3a8: 'Skein1024-576',
-  0xb3a9: 'Skein1024-584',
-  0xb3aa: 'Skein1024-592',
-  0xb3ab: 'Skein1024-600',
-  0xb3ac: 'Skein1024-608',
-  0xb3ad: 'Skein1024-616',
-  0xb3ae: 'Skein1024-624',
-  0xb3af: 'Skein1024-632',
-  0xb3b0: 'Skein1024-640',
-  0xb3b1: 'Skein1024-648',
-  0xb3b2: 'Skein1024-656',
-  0xb3b3: 'Skein1024-664',
-  0xb3b4: 'Skein1024-672',
-  0xb3b5: 'Skein1024-680',
-  0xb3b6: 'Skein1024-688',
-  0xb3b7: 'Skein1024-696',
-  0xb3b8: 'Skein1024-704',
-  0xb3b9: 'Skein1024-712',
-  0xb3ba: 'Skein1024-720',
-  0xb3bb: 'Skein1024-728',
-  0xb3bc: 'Skein1024-736',
-  0xb3bd: 'Skein1024-744',
-  0xb3be: 'Skein1024-752',
-  0xb3bf: 'Skein1024-760',
-  0xb3c0: 'Skein1024-768',
-  0xb3c1: 'Skein1024-776',
-  0xb3c2: 'Skein1024-784',
-  0xb3c3: 'Skein1024-792',
-  0xb3c4: 'Skein1024-800',
-  0xb3c5: 'Skein1024-808',
-  0xb3c6: 'Skein1024-816',
-  0xb3c7: 'Skein1024-824',
-  0xb3c8: 'Skein1024-832',
-  0xb3c9: 'Skein1024-840',
-  0xb3ca: 'Skein1024-848',
-  0xb3cb: 'Skein1024-856',
-  0xb3cc: 'Skein1024-864',
-  0xb3cd: 'Skein1024-872',
-  0xb3ce: 'Skein1024-880',
-  0xb3cf: 'Skein1024-888',
-  0xb3d0: 'Skein1024-896',
-  0xb3d1: 'Skein1024-904',
-  0xb3d2: 'Skein1024-912',
-  0xb3d3: 'Skein1024-920',
-  0xb3d4: 'Skein1024-928',
-  0xb3d5: 'Skein1024-936',
-  0xb3d6: 'Skein1024-944',
-  0xb3d7: 'Skein1024-952',
-  0xb3d8: 'Skein1024-960',
-  0xb3d9: 'Skein1024-968',
-  0xb3da: 'Skein1024-976',
-  0xb3db: 'Skein1024-984',
-  0xb3dc: 'Skein1024-992',
-  0xb3dd: 'Skein1024-1000',
-  0xb3de: 'Skein1024-1008',
-  0xb3df: 'Skein1024-1016',
-  0xb3e0: 'Skein1024-1024'
-})
-
-exports.defaultLengths = Object.freeze({
-  0x11: 20,
-  0x12: 32,
-  0x13: 64,
-  0x56: 32,
-  0x17: 28,
-  0x16: 32,
-  0x15: 48,
-  0x14: 64,
-  0x18: 32,
-  0x19: 64,
-  0x1A: 28,
-  0x1B: 32,
-  0x1C: 48,
-  0x1D: 64,
-  0x22: 32,
-
-  0xb201: 0x01,
-  0xb202: 0x02,
-  0xb203: 0x03,
-  0xb204: 0x04,
-  0xb205: 0x05,
-  0xb206: 0x06,
-  0xb207: 0x07,
-  0xb208: 0x08,
-  0xb209: 0x09,
-  0xb20a: 0x0a,
-  0xb20b: 0x0b,
-  0xb20c: 0x0c,
-  0xb20d: 0x0d,
-  0xb20e: 0x0e,
-  0xb20f: 0x0f,
-  0xb210: 0x10,
-  0xb211: 0x11,
-  0xb212: 0x12,
-  0xb213: 0x13,
-  0xb214: 0x14,
-  0xb215: 0x15,
-  0xb216: 0x16,
-  0xb217: 0x17,
-  0xb218: 0x18,
-  0xb219: 0x19,
-  0xb21a: 0x1a,
-  0xb21b: 0x1b,
-  0xb21c: 0x1c,
-  0xb21d: 0x1d,
-  0xb21e: 0x1e,
-  0xb21f: 0x1f,
-  0xb220: 0x20,
-  0xb221: 0x21,
-  0xb222: 0x22,
-  0xb223: 0x23,
-  0xb224: 0x24,
-  0xb225: 0x25,
-  0xb226: 0x26,
-  0xb227: 0x27,
-  0xb228: 0x28,
-  0xb229: 0x29,
-  0xb22a: 0x2a,
-  0xb22b: 0x2b,
-  0xb22c: 0x2c,
-  0xb22d: 0x2d,
-  0xb22e: 0x2e,
-  0xb22f: 0x2f,
-  0xb230: 0x30,
-  0xb231: 0x31,
-  0xb232: 0x32,
-  0xb233: 0x33,
-  0xb234: 0x34,
-  0xb235: 0x35,
-  0xb236: 0x36,
-  0xb237: 0x37,
-  0xb238: 0x38,
-  0xb239: 0x39,
-  0xb23a: 0x3a,
-  0xb23b: 0x3b,
-  0xb23c: 0x3c,
-  0xb23d: 0x3d,
-  0xb23e: 0x3e,
-  0xb23f: 0x3f,
-  0xb240: 0x40,
-  0xb241: 0x01,
-  0xb242: 0x02,
-  0xb243: 0x03,
-  0xb244: 0x04,
-  0xb245: 0x05,
-  0xb246: 0x06,
-  0xb247: 0x07,
-  0xb248: 0x08,
-  0xb249: 0x09,
-  0xb24a: 0x0a,
-  0xb24b: 0x0b,
-  0xb24c: 0x0c,
-  0xb24d: 0x0d,
-  0xb24e: 0x0e,
-  0xb24f: 0x0f,
-  0xb250: 0x10,
-  0xb251: 0x11,
-  0xb252: 0x12,
-  0xb253: 0x13,
-  0xb254: 0x14,
-  0xb255: 0x15,
-  0xb256: 0x16,
-  0xb257: 0x17,
-  0xb258: 0x18,
-  0xb259: 0x19,
-  0xb25a: 0x1a,
-  0xb25b: 0x1b,
-  0xb25c: 0x1c,
-  0xb25d: 0x1d,
-  0xb25e: 0x1e,
-  0xb25f: 0x1f,
-  0xb260: 0x20,
-  0xb301: 0x01,
-  0xb302: 0x02,
-  0xb303: 0x03,
-  0xb304: 0x04,
-  0xb305: 0x05,
-  0xb306: 0x06,
-  0xb307: 0x07,
-  0xb308: 0x08,
-  0xb309: 0x09,
-  0xb30a: 0x0a,
-  0xb30b: 0x0b,
-  0xb30c: 0x0c,
-  0xb30d: 0x0d,
-  0xb30e: 0x0e,
-  0xb30f: 0x0f,
-  0xb310: 0x10,
-  0xb311: 0x11,
-  0xb312: 0x12,
-  0xb313: 0x13,
-  0xb314: 0x14,
-  0xb315: 0x15,
-  0xb316: 0x16,
-  0xb317: 0x17,
-  0xb318: 0x18,
-  0xb319: 0x19,
-  0xb31a: 0x1a,
-  0xb31b: 0x1b,
-  0xb31c: 0x1c,
-  0xb31d: 0x1d,
-  0xb31e: 0x1e,
-  0xb31f: 0x1f,
-  0xb320: 0x20,
-  0xb321: 0x01,
-  0xb322: 0x02,
-  0xb323: 0x03,
-  0xb324: 0x04,
-  0xb325: 0x05,
-  0xb326: 0x06,
-  0xb327: 0x07,
-  0xb328: 0x08,
-  0xb329: 0x09,
-  0xb32a: 0x0a,
-  0xb32b: 0x0b,
-  0xb32c: 0x0c,
-  0xb32d: 0x0d,
-  0xb32e: 0x0e,
-  0xb32f: 0x0f,
-  0xb330: 0x10,
-  0xb331: 0x11,
-  0xb332: 0x12,
-  0xb333: 0x13,
-  0xb334: 0x14,
-  0xb335: 0x15,
-  0xb336: 0x16,
-  0xb337: 0x17,
-  0xb338: 0x18,
-  0xb339: 0x19,
-  0xb33a: 0x1a,
-  0xb33b: 0x1b,
-  0xb33c: 0x1c,
-  0xb33d: 0x1d,
-  0xb33e: 0x1e,
-  0xb33f: 0x1f,
-  0xb340: 0x20,
-  0xb341: 0x21,
-  0xb342: 0x22,
-  0xb343: 0x23,
-  0xb344: 0x24,
-  0xb345: 0x25,
-  0xb346: 0x26,
-  0xb347: 0x27,
-  0xb348: 0x28,
-  0xb349: 0x29,
-  0xb34a: 0x2a,
-  0xb34b: 0x2b,
-  0xb34c: 0x2c,
-  0xb34d: 0x2d,
-  0xb34e: 0x2e,
-  0xb34f: 0x2f,
-  0xb350: 0x30,
-  0xb351: 0x31,
-  0xb352: 0x32,
-  0xb353: 0x33,
-  0xb354: 0x34,
-  0xb355: 0x35,
-  0xb356: 0x36,
-  0xb357: 0x37,
-  0xb358: 0x38,
-  0xb359: 0x39,
-  0xb35a: 0x3a,
-  0xb35b: 0x3b,
-  0xb35c: 0x3c,
-  0xb35d: 0x3d,
-  0xb35e: 0x3e,
-  0xb35f: 0x3f,
-  0xb360: 0x40,
-  0xb361: 0x01,
-  0xb362: 0x02,
-  0xb363: 0x03,
-  0xb364: 0x04,
-  0xb365: 0x05,
-  0xb366: 0x06,
-  0xb367: 0x07,
-  0xb368: 0x08,
-  0xb369: 0x09,
-  0xb36a: 0x0a,
-  0xb36b: 0x0b,
-  0xb36c: 0x0c,
-  0xb36d: 0x0d,
-  0xb36e: 0x0e,
-  0xb36f: 0x0f,
-  0xb370: 0x10,
-  0xb371: 0x11,
-  0xb372: 0x12,
-  0xb373: 0x13,
-  0xb374: 0x14,
-  0xb375: 0x15,
-  0xb376: 0x16,
-  0xb377: 0x17,
-  0xb378: 0x18,
-  0xb379: 0x19,
-  0xb37a: 0x1a,
-  0xb37b: 0x1b,
-  0xb37c: 0x1c,
-  0xb37d: 0x1d,
-  0xb37e: 0x1e,
-  0xb37f: 0x1f,
-  0xb380: 0x20,
-  0xb381: 0x21,
-  0xb382: 0x22,
-  0xb383: 0x23,
-  0xb384: 0x24,
-  0xb385: 0x25,
-  0xb386: 0x26,
-  0xb387: 0x27,
-  0xb388: 0x28,
-  0xb389: 0x29,
-  0xb38a: 0x2a,
-  0xb38b: 0x2b,
-  0xb38c: 0x2c,
-  0xb38d: 0x2d,
-  0xb38e: 0x2e,
-  0xb38f: 0x2f,
-  0xb390: 0x30,
-  0xb391: 0x31,
-  0xb392: 0x32,
-  0xb393: 0x33,
-  0xb394: 0x34,
-  0xb395: 0x35,
-  0xb396: 0x36,
-  0xb397: 0x37,
-  0xb398: 0x38,
-  0xb399: 0x39,
-  0xb39a: 0x3a,
-  0xb39b: 0x3b,
-  0xb39c: 0x3c,
-  0xb39d: 0x3d,
-  0xb39e: 0x3e,
-  0xb39f: 0x3f,
-  0xb3a0: 0x40,
-  0xb3a1: 0x41,
-  0xb3a2: 0x42,
-  0xb3a3: 0x43,
-  0xb3a4: 0x44,
-  0xb3a5: 0x45,
-  0xb3a6: 0x46,
-  0xb3a7: 0x47,
-  0xb3a8: 0x48,
-  0xb3a9: 0x49,
-  0xb3aa: 0x4a,
-  0xb3ab: 0x4b,
-  0xb3ac: 0x4c,
-  0xb3ad: 0x4d,
-  0xb3ae: 0x4e,
-  0xb3af: 0x4f,
-  0xb3b0: 0x50,
-  0xb3b1: 0x51,
-  0xb3b2: 0x52,
-  0xb3b3: 0x53,
-  0xb3b4: 0x54,
-  0xb3b5: 0x55,
-  0xb3b6: 0x56,
-  0xb3b7: 0x57,
-  0xb3b8: 0x58,
-  0xb3b9: 0x59,
-  0xb3ba: 0x5a,
-  0xb3bb: 0x5b,
-  0xb3bc: 0x5c,
-  0xb3bd: 0x5d,
-  0xb3be: 0x5e,
-  0xb3bf: 0x5f,
-  0xb3c0: 0x60,
-  0xb3c1: 0x61,
-  0xb3c2: 0x62,
-  0xb3c3: 0x63,
-  0xb3c4: 0x64,
-  0xb3c5: 0x65,
-  0xb3c6: 0x66,
-  0xb3c7: 0x67,
-  0xb3c8: 0x68,
-  0xb3c9: 0x69,
-  0xb3ca: 0x6a,
-  0xb3cb: 0x6b,
-  0xb3cc: 0x6c,
-  0xb3cd: 0x6d,
-  0xb3ce: 0x6e,
-  0xb3cf: 0x6f,
-  0xb3d0: 0x70,
-  0xb3d1: 0x71,
-  0xb3d2: 0x72,
-  0xb3d3: 0x73,
-  0xb3d4: 0x74,
-  0xb3d5: 0x75,
-  0xb3d6: 0x76,
-  0xb3d7: 0x77,
-  0xb3d8: 0x78,
-  0xb3d9: 0x79,
-  0xb3da: 0x7a,
-  0xb3db: 0x7b,
-  0xb3dc: 0x7c,
-  0xb3dd: 0x7d,
-  0xb3de: 0x7e,
-  0xb3df: 0x7f,
-  0xb3e0: 0x80
-})
-
-},{}],24:[function(require,module,exports){
-(function (Buffer){
+},{"buffer":3,"web-encoding":41}],34:[function(require,module,exports){
+arguments[4][11][0].apply(exports,arguments)
+},{"dup":11}],35:[function(require,module,exports){
+// @ts-check
+/* eslint-disable guard-for-in */
 /**
  * Multihash implementation in JavaScript.
  *
@@ -5534,28 +4635,37 @@ exports.defaultLengths = Object.freeze({
  */
 'use strict'
 
-const bs58 = require('bs58')
-
-const cs = require('./constants')
-
-exports.names = cs.names
-exports.codes = cs.codes
-exports.defaultLengths = cs.defaultLengths
-
+const { Buffer } = require('buffer')
+const multibase = require('multibase')
 const varint = require('varint')
+const { names } = require('./constants')
+const { TextDecoder } = require('web-encoding')
+
+const textDecoder = new TextDecoder()
+const codes = {}
+
+for (const key in names) {
+  codes[names[key]] = key
+}
+exports.names = names
+exports.codes = Object.freeze(codes)
 
 /**
  * Convert the given multihash to a hex encoded string.
  *
- * @param {Buffer} hash
+ * @param {Uint8Array} hash
  * @returns {string}
  */
 exports.toHexString = function toHexString (hash) {
-  if (!Buffer.isBuffer(hash)) {
-    throw new Error('must be passed a buffer')
+  if (!(hash instanceof Uint8Array)) {
+    throw new Error('must be passed a Uint8Array')
   }
 
-  return hash.toString('hex')
+  const buffer = Buffer.isBuffer(hash)
+    ? hash
+    : Buffer.from(hash.buffer, hash.byteOffset, hash.byteLength)
+
+  return buffer.toString('hex')
 }
 
 /**
@@ -5571,45 +4681,47 @@ exports.fromHexString = function fromHexString (hash) {
 /**
  * Convert the given multihash to a base58 encoded string.
  *
- * @param {Buffer} hash
+ * @param {Uint8Array} hash
  * @returns {string}
  */
 exports.toB58String = function toB58String (hash) {
-  if (!Buffer.isBuffer(hash)) {
-    throw new Error('must be passed a buffer')
+  if (!(hash instanceof Uint8Array)) {
+    throw new Error('must be passed a Uint8Array')
   }
 
-  return bs58.encode(hash)
+  return textDecoder.decode(multibase.encode('base58btc', hash)).slice(1)
 }
 
 /**
  * Convert the given base58 encoded string to a multihash.
  *
- * @param {string|Buffer} hash
+ * @param {string|Uint8Array} hash
  * @returns {Buffer}
  */
 exports.fromB58String = function fromB58String (hash) {
-  let encoded = hash
-  if (Buffer.isBuffer(hash)) {
-    encoded = hash.toString()
-  }
+  const encoded = hash instanceof Uint8Array
+    ? textDecoder.decode(hash)
+    : hash
 
-  return Buffer.from(bs58.decode(encoded))
+  return multibase.decode('z' + encoded)
 }
 
 /**
  * Decode a hash from the given multihash.
  *
- * @param {Buffer} buf
+ * @param {Uint8Array} bytes
  * @returns {{code: number, name: string, length: number, digest: Buffer}} result
  */
-exports.decode = function decode (buf) {
-  if (!(Buffer.isBuffer(buf))) {
-    throw new Error('multihash must be a Buffer')
+exports.decode = function decode (bytes) {
+  if (!(bytes instanceof Uint8Array)) {
+    throw new Error('multihash must be a Uint8Array')
   }
+  let buf = Buffer.isBuffer(bytes)
+    ? bytes
+    : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 
-  if (buf.length < 3) {
-    throw new Error('multihash too short. must be > 3 bytes.')
+  if (buf.length < 2) {
+    throw new Error('multihash too short. must be > 2 bytes.')
   }
 
   const code = varint.decode(buf)
@@ -5619,8 +4731,8 @@ exports.decode = function decode (buf) {
   buf = buf.slice(varint.decode.bytes)
 
   const len = varint.decode(buf)
-  if (len < 1) {
-    throw new Error(`multihash invalid length: 0x${len.toString(16)}`)
+  if (len < 0) {
+    throw new Error(`multihash invalid length: ${len}`)
   }
   buf = buf.slice(varint.decode.bytes)
 
@@ -5629,8 +4741,8 @@ exports.decode = function decode (buf) {
   }
 
   return {
-    code: code,
-    name: cs.codes[code],
+    code,
+    name: codes[code],
     length: len,
     digest: buf
   }
@@ -5641,7 +4753,7 @@ exports.decode = function decode (buf) {
  *
  * > **Note:** the length is derived from the length of the digest itself.
  *
- * @param {Buffer} digest
+ * @param {Uint8Array} digest
  * @param {string|number} code
  * @param {number} [length]
  * @returns {Buffer}
@@ -5654,8 +4766,8 @@ exports.encode = function encode (digest, code, length) {
   // ensure it's a hashfunction code.
   const hashfn = exports.coerceCode(code)
 
-  if (!(Buffer.isBuffer(digest))) {
-    throw new Error('digest should be a Buffer')
+  if (!(digest instanceof Uint8Array)) {
+    throw new Error('digest should be a Uint8Array')
   }
 
   if (length == null) {
@@ -5666,11 +4778,13 @@ exports.encode = function encode (digest, code, length) {
     throw new Error('digest length should be equal to specified length.')
   }
 
-  return Buffer.concat([
-    Buffer.from(varint.encode(hashfn)),
-    Buffer.from(varint.encode(length)),
-    digest
-  ])
+  const hash = varint.encode(hashfn)
+  const len = varint.encode(length)
+  const buffer = Buffer.alloc(hash.length + len.length + digest.length)
+  buffer.set(hash, 0)
+  buffer.set(len, hash.length)
+  buffer.set(digest, hash.length + len.length)
+  return buffer
 }
 
 /**
@@ -5683,17 +4797,17 @@ exports.coerceCode = function coerceCode (name) {
   let code = name
 
   if (typeof name === 'string') {
-    if (cs.names[name] === undefined) {
+    if (names[name] === undefined) {
       throw new Error(`Unrecognized hash function named: ${name}`)
     }
-    code = cs.names[name]
+    code = names[name]
   }
 
   if (typeof code !== 'number') {
     throw new Error(`Hash function code should be a number. Got: ${code}`)
   }
 
-  if (cs.codes[code] === undefined && !exports.isAppCode(code)) {
+  if (codes[code] === undefined && !exports.isAppCode(code)) {
     throw new Error(`Unrecognized function code: ${code}`)
   }
 
@@ -5721,7 +4835,7 @@ exports.isValidCode = function validCode (code) {
     return true
   }
 
-  if (cs.codes[code]) {
+  if (codes[code]) {
     return true
   }
 
@@ -5731,8 +4845,8 @@ exports.isValidCode = function validCode (code) {
 /**
  * Check if the given buffer is a valid multihash. Throws an error if it is not valid.
  *
- * @param {Buffer} multihash
- * @returns {undefined}
+ * @param {Uint8Array} multihash
+ * @returns {void}
  * @throws {Error}
  */
 function validate (multihash) {
@@ -5743,18 +4857,17 @@ exports.validate = validate
 /**
  * Returns a prefix from a valid multihash. Throws an error if it is not valid.
  *
- * @param {Buffer} multihash
- * @returns {undefined}
+ * @param {Uint8Array} multihash
+ * @returns {Buffer}
  * @throws {Error}
  */
 exports.prefix = function prefix (multihash) {
   validate(multihash)
 
-  return multihash.slice(0, 2)
+  return Buffer.from(multihash.buffer, multihash.byteOffset, 2)
 }
 
-}).call(this,require("buffer").Buffer)
-},{"./constants":23,"bs58":3,"buffer":4,"varint":28}],25:[function(require,module,exports){
+},{"./constants":34,"buffer":3,"multibase":31,"varint":39,"web-encoding":41}],36:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -5818,7 +4931,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":4}],26:[function(require,module,exports){
+},{"buffer":3}],37:[function(require,module,exports){
 module.exports = read
 
 var MSB = 0x80
@@ -5849,7 +4962,7 @@ function read(buf, offset) {
   return res
 }
 
-},{}],27:[function(require,module,exports){
+},{}],38:[function(require,module,exports){
 module.exports = encode
 
 var MSB = 0x80
@@ -5877,14 +4990,14 @@ function encode(num, out, offset) {
   return out
 }
 
-},{}],28:[function(require,module,exports){
+},{}],39:[function(require,module,exports){
 module.exports = {
     encode: require('./encode.js')
   , decode: require('./decode.js')
   , encodingLength: require('./length.js')
 }
 
-},{"./decode.js":26,"./encode.js":27,"./length.js":29}],29:[function(require,module,exports){
+},{"./decode.js":37,"./encode.js":38,"./length.js":40}],40:[function(require,module,exports){
 
 var N1 = Math.pow(2,  7)
 var N2 = Math.pow(2, 14)
@@ -5911,7 +5024,13 @@ module.exports = function (value) {
   )
 }
 
-},{}],30:[function(require,module,exports){
+},{}],41:[function(require,module,exports){
+"use strict"
+
+exports.TextEncoder = TextEncoder
+exports.TextDecoder = TextDecoder
+
+},{}],42:[function(require,module,exports){
 /*
 	ISC License
 
@@ -5932,6 +5051,33 @@ module.exports = function (value) {
 
 const CID = require('cids');
 
+// Label's max length in DNS (https://tools.ietf.org/html/rfc1034#page-7)
+const dnsLabelMaxLength = 63;
+
+/**
+ * Take any ipfsHash and convert it to DNS-compatible CID
+ * @param {string} ipfsHash a regular ipfs hash either a cid v0 or v1
+ * @return {string} the resulting ipfs hash as a cid v1
+ */
+const cidForWeb = (ipfsHash) => {
+	let cid = new CID(ipfsHash);
+	if (cid.version === 0) {
+		cid = cid.toV1();
+	}
+  let dnsLabel = cid.toString('base32');
+  if (dnsLabel.length > dnsLabelMaxLength) {
+    const b36 = cid.toString('base36');
+    if (b36.length <= dnsLabelMaxLength) {
+      return b36;
+    }
+    throw new TypeError ('CID is longer than DNS limit of 63 characters and is not compatible with public gateways');
+  }
+	return dnsLabel;
+}
+
+exports.cidForWeb = cidForWeb;
+
+
 /**
  * Take any ipfsHash and convert it to a CID v1 encoded in base32.
  * @param {string} ipfsHash a regular ipfs hash either a cid v0 or v1 (v1 will remain unchanged)
@@ -5947,7 +5093,7 @@ const cidV0ToV1Base32 = (ipfsHash) => {
 
 exports.cidV0ToV1Base32 = cidV0ToV1Base32;
 
-},{"cids":6}],31:[function(require,module,exports){
+},{"cids":14}],43:[function(require,module,exports){
 /*
 	ISC License
 
@@ -5969,12 +5115,13 @@ exports.cidV0ToV1Base32 = cidV0ToV1Base32;
 const multiC = require('multicodec');
 
 const { hexStringToBuffer, profiles } = require('./profiles');
-const { cidV0ToV1Base32 } = require('./helpers');
+const { cidForWeb, cidV0ToV1Base32 } = require('./helpers');
 
 module.exports = {
 
 	//export some helpers functions
 	helpers: {
+		cidForWeb,
 		cidV0ToV1Base32,
 	},
 
@@ -6033,7 +5180,7 @@ module.exports = {
 	},
 }
 
-},{"./helpers":30,"./profiles":32,"multicodec":18}],32:[function(require,module,exports){
+},{"./helpers":42,"./profiles":44,"multicodec":24}],44:[function(require,module,exports){
 (function (Buffer){
 /*
 	ISC License
@@ -6089,8 +5236,7 @@ const encodes = {
   * @return {Buffer}
   */
   ipfs: (value) => {
-    const multihash = multiH.fromB58String(value);
-    return new CID(1, 'dag-pb', multihash).buffer;
+    return new CID(value).toV1().buffer;
   },
   /**
   * @param {string} value
@@ -6155,6 +5301,7 @@ const profiles = {
 
 exports.hexStringToBuffer = hexStringToBuffer;
 exports.profiles = profiles;
+
 }).call(this,require("buffer").Buffer)
-},{"buffer":4,"cids":6,"multihashes":24}]},{},[31])(31)
+},{"buffer":3,"cids":14,"multihashes":35}]},{},[43])(43)
 });

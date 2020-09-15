@@ -18,6 +18,33 @@
 
 const CID = require('cids');
 
+// Label's max length in DNS (https://tools.ietf.org/html/rfc1034#page-7)
+const dnsLabelMaxLength = 63;
+
+/**
+ * Take any ipfsHash and convert it to DNS-compatible CID
+ * @param {string} ipfsHash a regular ipfs hash either a cid v0 or v1
+ * @return {string} the resulting ipfs hash as a cid v1
+ */
+const cidForWeb = (ipfsHash) => {
+	let cid = new CID(ipfsHash);
+	if (cid.version === 0) {
+		cid = cid.toV1();
+	}
+  let dnsLabel = cid.toString('base32');
+  if (dnsLabel.length > dnsLabelMaxLength) {
+    const b36 = cid.toString('base36');
+    if (b36.length <= dnsLabelMaxLength) {
+      return b36;
+    }
+    throw new TypeError ('CID is longer than DNS limit of 63 characters and is not compatible with public gateways');
+  }
+	return dnsLabel;
+}
+
+exports.cidForWeb = cidForWeb;
+
+
 /**
  * Take any ipfsHash and convert it to a CID v1 encoded in base32.
  * @param {string} ipfsHash a regular ipfs hash either a cid v0 or v1 (v1 will remain unchanged)

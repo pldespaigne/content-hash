@@ -121,16 +121,39 @@ describe('content-hash', () => {
 			actual.should.be.equal(onion3);
 		});
 	});
-	describe('helpers', () => {
+	describe('helpers.cidV0ToV1Base32', () => {
+		const { cidV0ToV1Base32 } = contentHash.helpers;
 		it('should convert CID v0 into v1', () => {
-			const actual = contentHash.helpers.cidV0ToV1Base32(ipfs);
+			const actual = cidV0ToV1Base32(ipfs);
 			actual.should.be.equal(ipfsBase32DagPb);
 		});
 		it('should keep CID v1 Base32 as-is', () => {
-			const dagPbCid = contentHash.helpers.cidV0ToV1Base32(ipfsBase32DagPb);
+			const dagPbCid = cidV0ToV1Base32(ipfsBase32DagPb);
 			dagPbCid.should.be.equal(ipfsBase32DagPb);
 			const libp2pKeyCid = contentHash.helpers.cidV0ToV1Base32(ipfsBase32Libp2pKey);
 			libp2pKeyCid.should.be.equal(ipfsBase32Libp2pKey);
+		});
+	});
+	describe('helpers.cidForWeb', () => {
+		const { cidForWeb } = contentHash.helpers;
+		it('should convert CID into case-insenitive base', () => {
+			const actual = cidForWeb(ipfs);
+			actual.should.be.equal(ipfsBase32DagPb);
+		});
+		it('should keep CID v1 Base32 if under DNS limit', () => {
+			const b32_59chars = 'bafybeibj6lixxzqtsb45ysdjnupvqkufgdvzqbnvmhw2kf7cfkesy7r7d4';
+			const webCid = cidForWeb(b32_59chars);
+			webCid.should.be.equal(b32_59chars);
+		});
+		it('should convert to Base36 if it helps with DNS limit', () => {
+			const b32_65chars = 'bafzaajaiaejca4syrpdu6gdx4wsdnokxkprgzxf4wrstuc34gxw5k5jrag2so5gk';
+			const b36_62chars = 'k51qzi5uqu5dj16qyiq0tajolkojyl9qdkr254920wxv7ghtuwcz593tp69z9m';
+			const webCid = cidForWeb(b32_65chars);
+			webCid.should.be.equal(b36_62chars);
+		});
+		it('should throw if CID is over DNS limit', () => {
+			const b32_sha512_110chars = 'bafkrgqhhyivzstcz3hhswshfjgy6ertgmnqeleynhwt4dlfsthi4hn7zgh4uvlsb5xncykzapi3ocd4lzogukir6ksdy6wzrnz6ohnv4aglcs';
+			expect(() => cidForWeb(b32_sha512_110chars)).to.throw(TypeError, 'CID is longer than DNS limit of 63 characters and is not compatible with public gateways');
 		});
 	});
 });
