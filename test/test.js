@@ -151,5 +151,9 @@ describe('content-hash', () => {
 			const webCid = cidForWeb(b32_65chars);
 			webCid.should.be.equal(b36_62chars);
 		});
+		it('should throw if CID is over DNS limit', () => {
+			const b32_sha512_110chars = 'bafkrgqhhyivzstcz3hhswshfjgy6ertgmnqeleynhwt4dlfsthi4hn7zgh4uvlsb5xncykzapi3ocd4lzogukir6ksdy6wzrnz6ohnv4aglcs';
+			expect(() => cidForWeb(b32_sha512_110chars)).to.throw(TypeError, 'CID is longer than DNS limit of 63 characters and is not compatible with public gateways');
+		});
 	});
 });

@@ -35,10 +35,9 @@ const cidForWeb = (ipfsHash) => {
   if (dnsLabel.length > dnsLabelMaxLength) {
     const b36 = cid.toString('base36');
     if (b36.length <= dnsLabelMaxLength) {
-      dnsLabel = b36;
-    } else {
-      throw new Error ('CID is longer than DNS limit of 63 characters and is not compatible with public gateways');
+      return b36;
     }
+    throw new TypeError ('CID is longer than DNS limit of 63 characters and is not compatible with public gateways');
   }
 	return dnsLabel;
 }
