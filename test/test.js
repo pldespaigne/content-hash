@@ -125,7 +125,7 @@ describe('content-hash', () => {
 	});
 	describe('skynet', () => {
 		it('should encode', () => {
-			const actual = contentHash.encode('skynet-ns', swarm);
+			const actual = contentHash.encode('skynet-ns', skylink);
 			actual.should.be.equal(skylink_contentHash);
 		});
 		it('should getCodec', () => {
