@@ -43,6 +43,14 @@ const encodes = {
   * @param {string} value
   * @return {Buffer}
   */
+  skynet: (value) => {
+    const multihash = multiH.encode(hexStringToBuffer(value), 'keccak-256');
+    return new CID(1, 'skynet-skylink-v1', multihash).buffer;
+  },
+  /**
+  * @param {string} value
+  * @return {Buffer}
+  */
   swarm: (value) => {
     const multihash = multiH.encode(hexStringToBuffer(value), 'keccak-256');
 		return new CID(1, 'swarm-manifest', multihash).buffer;
@@ -98,6 +106,10 @@ const decodes = {
 * `decode` should be chosen among the `decodes` functions
 */
 const profiles = {
+  'skynet-ns': {
+    encode: encodes.skynet,
+    decode: decodes.hexMultiHash,
+  },
   'swarm-ns': {
     encode: encodes.swarm,
     decode: decodes.hexMultiHash,

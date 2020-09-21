@@ -14,6 +14,8 @@ const onion3 = 'p53lf57qovyuvwsc6xnrppyply3vtqm7l6pcobkmyqsiofyeznfu5uqd';
 const onion3_contentHash = 'bd037035336c663537716f7679757677736336786e72707079706c79337674716d376c3670636f626b6d797173696f6679657a6e667535757164';
 const ipfsBase32DagPb = 'bafybeibj6lixxzqtsb45ysdjnupvqkufgdvzqbnvmhw2kf7cfkesy7r7d4';
 const ipfsBase32Libp2pKey = 'bafzbeie5745rpv2m6tjyuugywy4d5ewrqgqqhfnf445he3omzpjbx5xqxe';
+const skylink = 'CABAB_1Dt0FJsxqsu_J4TodNCbCGvtFf1Uys_3EgzOlTcg'
+const skylink_contentHash = '[TODO:add once codec is supported]'
 
 describe('content-hash (legacy tests)', () =>
 	{
@@ -119,6 +121,20 @@ describe('content-hash', () => {
 		it('should decode', () => {
 			const actual = contentHash.decode(onion3_contentHash);
 			actual.should.be.equal(onion3);
+		});
+	});
+	describe('skynet', () => {
+		it('should encode', () => {
+			const actual = contentHash.encode('skynet-ns', swarm);
+			actual.should.be.equal(skylink_contentHash);
+		});
+		it('should getCodec', () => {
+			const actual = contentHash.getCodec(skylink_contentHash);
+			actual.should.be.equal('skynet-ns');
+		});
+		it('should decode', () => {
+			const actual = contentHash.decode(skylink_contentHash);
+			actual.should.be.equal(skylink);
 		});
 	});
 	describe('helpers', () => {

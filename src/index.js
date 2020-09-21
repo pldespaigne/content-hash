@@ -52,6 +52,15 @@ module.exports = {
 	},
 
 	/**
+	* Encode a Skylink into a content hash
+	* @param {string} skylink string containing a Skylink
+	* @return {string} the resulting content hash
+	*/
+	fromSkylink: function (skylink) {
+		return this.encode('skynet-ns', skylink);
+	},
+
+	/**
 	* Encode a Swarm address into a content hash
 	* @param {string} swarmHash string containing a Swarm address
 	* @return {string} the resulting content hash
