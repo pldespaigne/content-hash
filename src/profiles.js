@@ -45,7 +45,7 @@ const encodes = {
   */
   skynet: (value) => {
     const multihash = multiH.encode(hexStringToBuffer(value), 'keccak-256');
-    return new CID(1, 'skynet-skylink-v1', multihash).buffer;
+    return new CID(1, 'skynet-ns', multihash).buffer;
   },
   /**
   * @param {string} value
