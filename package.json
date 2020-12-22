@@ -1,25 +1,26 @@
 {
-  "name": "content-hash",
-  "version": "2.5.2",
-  "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers",
+  "name": "@ensdomains/content-hash",
+  "version": "2.5.3",
+  "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers (fork of pldespaigne/content-hash)",
   "main": "./src/index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pldespaigne/content-hash"
+    "url": "https://github.com/ensdomains/content-hash"
   },
   "scripts": {
     "build": "browserify ./src/index.js --s contentHash > ./dist/index.js",
     "demo": "static .",
     "deploy-demo": "echo \"surge demo https://content-hash.surge.sh\"",
+    "pub": "npm run build && npm publish --access public",
     "test": "mocha",
     "lint": "npx eslint ."
   },
   "author": "pldespaigne",
   "license": "ISC",
   "dependencies": {
-    "cids": "^0.7.1",
-    "multicodec": "^0.5.5",
-    "multihashes": "^0.4.15"
+    "cids": "^0.8.3",
+    "multicodec": "^1.0.4",
+    "multihashes": "^2.0.0"
   },
   "devDependencies": {
     "browserify": "^16.5.0",

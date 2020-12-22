@@ -19,12 +19,13 @@
 const multiC = require('multicodec');
 
 const { hexStringToBuffer, profiles } = require('./profiles');
-const { cidV0ToV1Base32 } = require('./helpers');
+const { cidForWeb, cidV0ToV1Base32 } = require('./helpers');
 
 module.exports = {
 
 	//export some helpers functions
 	helpers: {
+		cidForWeb,
 		cidV0ToV1Base32,
 	},
 

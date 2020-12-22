@@ -60,8 +60,7 @@ const encodes = {
   * @return {Buffer}
   */
   ipfs: (value) => {
-    const multihash = multiH.fromB58String(value);
-    return new CID(1, 'dag-pb', multihash).buffer;
+    return new CID(value).toV1().buffer;
   },
   /**
   * @param {string} value
