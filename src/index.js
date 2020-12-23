@@ -19,12 +19,13 @@
 const multiC = require('multicodec');
 
 const { hexStringToBuffer, profiles } = require('./profiles');
-const { cidV0ToV1Base32 } = require('./helpers');
+const { cidForWeb, cidV0ToV1Base32 } = require('./helpers');
 
 module.exports = {
 
 	//export some helpers functions
 	helpers: {
+		cidForWeb,
 		cidV0ToV1Base32,
 	},
 
@@ -49,6 +50,15 @@ module.exports = {
 	*/
 	fromIpfs: function (ipfsHash) {
 		return this.encode('ipfs-ns', ipfsHash);
+	},
+
+	/**
+	* Encode a Skylink into a content hash
+	* @param {string} skylink string containing a Skylink
+	* @return {string} the resulting content hash
+	*/
+	fromSkylink: function (skylink) {
+		return this.encode('skynet-ns', skylink);
 	},
 
 	/**
