@@ -3,9 +3,14 @@ const should = require('chai').should()
 const expect = require('chai').expect
 const contentHash = require('../src/index.js')
 
-const ipfs = 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
+const ipfs_CIDv0 = 'QmRAQB6YaCyidP37UdDnjFY5vQuiBrcqdyoW1CuDgwxkD4'
+const ipfs_CIDv1 = 'bafybeibj6lixxzqtsb45ysdjnupvqkufgdvzqbnvmhw2kf7cfkesy7r7d4'
 const ipfs_contentHash = 'e3010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
-const ipns_contentHash = 'e5010170122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
+const ipns_CIDv1 = 'k2k4r8kgnix5x0snul9112xdpqgiwc5xmvi8ja0szfhntep2d7qv8zz3'
+const ipns_CIDv0_contentHash = 'e5010172122029f2d17be6139079dc48696d1f582a8530eb9805b561eda517e22a892c7e3f1f'
+const ipns_peerID_B58 = '12D3KooWG4NvqQVczTrWY1H2tvsJmbQf5bbA3xGYXC4FM3wWCfE4'
+const ipns_libp2pKey_CIDv1 = 'k51qzi5uqu5dihst24f3rp2ej4co9berxohfkxaenbq1wjty7nrd5e9xp4afx1'
+const ipns_ED25519_contentHash = 'e50101720024080112205cbd1cc86ac20d6640795809c2a185bb2504538a2de8076da5a6971b8acb4715'
 const swarm = 'd1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 const swarm_contentHash = 'e40101fa011b20d1de9994b4d039f6548d191eb26786769f580809256b4685ef316805265ea162'
 const onion = 'zqktlwi4fecvo6ri'
@@ -22,12 +27,16 @@ describe('content-hash (legacy tests)', () =>
 			const actual_1 = contentHash.decode(swarm_contentHash);
 			let actual_2 = contentHash.decode(onion_contentHash);
 
-			actual_0.should.be.equal(ipfs);
+			actual_0.should.be.equal(ipfs_CIDv1);
 			actual_1.should.be.equal(swarm);
 			actual_2.should.be.equal(onion);
 		});
-		it('should encode an ipfs address', () => {
-			const actual = contentHash.fromIpfs(ipfs);
+		it('should encode an ipfs address (CIDv0)', () => {
+			const actual = contentHash.fromIpfs(ipfs_CIDv0);
+			actual.should.be.equal(ipfs_contentHash);
+		});
+		it('should encode an ipfs address (CIDv1)', () => {
+			const actual = contentHash.fromIpfs(ipfs_CIDv1);
 			actual.should.be.equal(ipfs_contentHash);
 		});
 		it('should encode a swarm address', () => {
@@ -66,31 +75,51 @@ describe('content-hash', () => {
 		});
 	});
 	describe('ipfs', () => {
-		it('should encode', () => {
-			const actual = contentHash.encode('ipfs-ns', ipfs);
+		it('should encode CIDv0', () => {
+			const actual = contentHash.encode('ipfs-ns', ipfs_CIDv0);
+			actual.should.be.equal(ipfs_contentHash);
+		});
+		it('should encode CIDv1', () => {
+			const actual = contentHash.encode('ipfs-ns', ipfs_CIDv1);
 			actual.should.be.equal(ipfs_contentHash);
 		});
 		it('should getCodec', () => {
 			const actual = contentHash.getCodec(ipfs_contentHash);
 			actual.should.be.equal('ipfs-ns');
 		});
-		it('should decode', () => {
+		it('should decode to CIDv1', () => {
 			const actual = contentHash.decode(ipfs_contentHash);
-			actual.should.be.equal(ipfs);
+			actual.should.be.equal(ipfs_CIDv1);
 		});
 	});
 	describe('ipns', () => {
-		it('should encode', () => {
-			const actual = contentHash.encode('ipns-ns', ipfs); // ipns & ipfs are the same hash and same encoding, only codec differ
-			actual.should.be.equal(ipns_contentHash);
+		it('should encode legacy PeerID (RSA B58)', () => {
+			// RSA ones lookes like regular multihashes
+			const actual = contentHash.encode('ipns-ns', ipfs_CIDv0);
+			actual.should.be.equal(ipns_CIDv0_contentHash);
+		});
+		it('should encode ED25519 PeerID (B58)', () => {
+			// ED25519 are allowed to be encoded in Base58 for backward-interop
+			const actual = contentHash.encode('ipns-ns', ipns_peerID_B58);
+			actual.should.be.equal(ipns_ED25519_contentHash);
+		});
+		it('should encode PeerID (CIDv1)', () => {
+			// libp2p-key as CID is the current canonical notation:
+			// https://github.com/libp2p/specs/blob/master/RFC/0001-text-peerid-cid.md
+			const actual = contentHash.encode('ipns-ns', ipns_libp2pKey_CIDv1);
+			actual.should.be.equal(ipns_ED25519_contentHash);
 		});
 		it('should getCodec', () => {
-			const actual = contentHash.getCodec(ipns_contentHash);
+			const actual = contentHash.getCodec(ipns_ED25519_contentHash);
 			actual.should.be.equal('ipns-ns');
 		});
-		it('should decode', () => {
-			const actual = contentHash.decode(ipns_contentHash);
-			actual.should.be.equal(ipfs); // ipns & ipfs are the same hash and same encoding, only codec differ
+		it('should decode legacy PeerID to CIDv1 with libp2p-key codec', () => {
+			const actual = contentHash.decode(ipns_CIDv0_contentHash);
+			actual.should.be.equal(ipns_CIDv1);
+		});
+		it('should decode ED25519 to CIDv1 with libp2p-key codec', () => {
+			const actual = contentHash.decode(ipns_ED25519_contentHash);
+			actual.should.be.equal(ipns_libp2pKey_CIDv1);
 		});
 	});
 	describe('onion', () => {
@@ -124,7 +153,7 @@ describe('content-hash', () => {
 	describe('helpers.cidV0ToV1Base32', () => {
 		const { cidV0ToV1Base32 } = contentHash.helpers;
 		it('should convert CID v0 into v1', () => {
-			const actual = cidV0ToV1Base32(ipfs);
+			const actual = cidV0ToV1Base32(ipfs_CIDv0);
 			actual.should.be.equal(ipfsBase32DagPb);
 		});
 		it('should keep CID v1 Base32 as-is', () => {
@@ -136,11 +165,11 @@ describe('content-hash', () => {
 	});
 	describe('helpers.cidForWeb', () => {
 		const { cidForWeb } = contentHash.helpers;
-		it('should convert CID into case-insenitive base', () => {
-			const actual = cidForWeb(ipfs);
+		it('should convert CIDv0 into case-insenitive base', () => {
+			const actual = cidForWeb(ipfs_CIDv0);
 			actual.should.be.equal(ipfsBase32DagPb);
 		});
-		it('should keep CID v1 Base32 if under DNS limit', () => {
+		it('should keep CIDv1 Base32 if under DNS limit', () => {
 			const b32_59chars = 'bafybeibj6lixxzqtsb45ysdjnupvqkufgdvzqbnvmhw2kf7cfkesy7r7d4';
 			const webCid = cidForWeb(b32_59chars);
 			webCid.should.be.equal(b32_59chars);
