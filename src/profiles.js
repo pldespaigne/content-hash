@@ -52,8 +52,16 @@ const encodes = {
   * @return {Buffer}
   */
   ipfs: (value) => {
-    const multihash = multiH.fromB58String(value);
-    return new CID(1, 'dag-pb', multihash).buffer;
+    return new CID(value).toV1().buffer;
+  },
+  /**
+  * @param {string} value
+  * @return {Buffer}
+  */
+  ipns: (value) => {
+    // represent libp2p-key as a CID
+    // https://github.com/libp2p/specs/blob/master/RFC/0001-text-peerid-cid.md
+    return new CID(1, 'libp2p-key', new CID(value).multihash).buffer
   },
   /**
   * @param {string} value
@@ -80,9 +88,9 @@ const decodes = {
   /**
   * @param {Buffer} value 
   */
-  b58MultiHash: (value) => {
-    const cid = new CID(value);
-    return multiH.toB58String(cid.multihash);
+  cid: (value) => {
+    const cid = new CID(value).toV1();
+    return cid.toString(cid.codec === 'libp2p-key' ? 'base36' : 'base32')
   },
   /**
   * @param {Buffer} value 
@@ -104,11 +112,11 @@ const profiles = {
   },
   'ipfs-ns': {
     encode: encodes.ipfs,
-    decode: decodes.b58MultiHash,
+    decode: decodes.cid,
   },
   'ipns-ns': {
-    encode: encodes.ipfs,
-    decode: decodes.b58MultiHash,
+    encode: encodes.ipns,
+    decode: decodes.cid,
   },
   'default': {
     encode: encodes.utf8,
