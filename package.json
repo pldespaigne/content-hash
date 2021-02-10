@@ -1,6 +1,6 @@
 {
   "name": "@ensdomains/content-hash",
-  "version": "2.5.3",
+  "version": "2.5.4",
   "description": "simple tool to encode/decode content hash for EIP 1577 compliant ENS Resolvers (fork of pldespaigne/content-hash)",
   "main": "./src/index.js",
   "repository": {
