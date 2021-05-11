@@ -11,6 +11,8 @@ Here you can find a [live demo](https://content-hash.surge.sh/) of this package.
 * link to [npm](https://www.npmjs.com/package/content-hash)
 * link to [Github](https://github.com/pldespaigne/content-hash)
 
+Here you can also find a [Python version](https://github.com/filips123/ContentHashPy) of this package.
+
 ## 🔠 Supported Codec
 - `swarm-ns`
 - `ipfs-ns`
